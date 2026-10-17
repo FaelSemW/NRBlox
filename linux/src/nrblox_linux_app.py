@@ -857,7 +857,81 @@ class NRBloxLinuxApp:
         self.root.mainloop()
 
 
+def auto_detect_x11_display():
+    if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+        x11_dir = Path("/tmp/.X11-unix")
+        if x11_dir.exists():
+            for sock in sorted(x11_dir.glob("X*")):
+                num = sock.name[1:]
+                if num.isdigit():
+                    os.environ["DISPLAY"] = f":{num}"
+                    break
+
+
+def run_interactive_cli(ctrl: LinuxEngineController):
+    while True:
+        guid = ctrl.settings.get("target_version_guid", DEFAULT_VERSION_GUID)
+        installed = RobloxLinuxCdnInstaller.is_installed(guid, False)
+        print("\n============================================================")
+        print("  ❖ NRBlox (Version 3.0.0 — Linux Native Core)")
+        print(f"  Client Version : {guid} ({'INSTALLED' if installed else 'NOT INSTALLED YET'})")
+        print(f"  Target FPS     : {ctrl.settings.get('target_fps', 240)} FPS | API: {ctrl.settings.get('rendering_api', 'Vulkan')}")
+        print("============================================================")
+        print("  [1] ➔  Launch Roblox (Auto-Download CDN & Start)")
+        print("  [2] 🔧 Launch Roblox Studio")
+        print("  [3] ⚙️  Configure Settings (FPS / FastFlags / Runtime)")
+        print("  [4] 📖 Show Wiki & Community Links")
+        print("  [0] ✖  Exit")
+        print("============================================================")
+        try:
+            choice = input("Select an option [1-4, 0]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+
+        if choice == "1":
+            guid = RobloxLinuxCdnInstaller.resolve_version_guid(False, False, guid)
+            ctrl.settings["target_version_guid"] = guid
+            if not RobloxLinuxCdnInstaller.is_installed(guid, False) or ctrl.settings.get("force_reinstall"):
+                print(f"[NRBlox] Downloading & extracting Roblox {guid} from setup.rbxcdn.com...")
+                RobloxLinuxCdnInstaller.install_or_update(
+                    guid,
+                    on_progress=lambda r, s, sb: print(f"[{int(r * 100):3d}%] {s} | {sb}"),
+                )
+                ctrl.settings["force_reinstall"] = False
+                ctrl.save_settings()
+            ctrl.sync_all(guid)
+            ok, msg = ctrl.launch_installed_client(guid, is_studio=False)
+            print(f"[NRBlox] {msg}")
+            break
+        elif choice == "2":
+            guid = RobloxLinuxCdnInstaller.resolve_version_guid(True, False, guid)
+            if not RobloxLinuxCdnInstaller.is_installed(guid, True):
+                RobloxLinuxCdnInstaller.install_or_update(
+                    guid,
+                    on_progress=lambda r, s, sb: print(f"[{int(r * 100):3d}%] {s} | {sb}"),
+                )
+            ok, msg = ctrl.launch_installed_client(guid, is_studio=True)
+            print(f"[NRBlox] {msg}")
+            break
+        elif choice == "3":
+            try:
+                fps_in = input(f"Target FPS (current {ctrl.settings.get('target_fps', 240)}): ").strip()
+                if fps_in.isdigit():
+                    ctrl.settings["target_fps"] = int(fps_in)
+                ctrl.save_settings()
+                print("[NRBlox] Settings saved and synced to ClientAppSettings.json!")
+            except (EOFError, KeyboardInterrupt):
+                pass
+        elif choice == "4":
+            print(f"  • Official Wiki   : {GITHUB_WIKI_URL}")
+            print(f"  • Official Discord: {DISCORD_URL}")
+        elif choice == "0":
+            break
+
+
 def main():
+    auto_detect_x11_display()
     ctrl = LinuxEngineController()
     args = sys.argv[1:]
 
@@ -885,9 +959,9 @@ def main():
         print(f"[NRBlox-Linux] Successfully installed {guid} to {LinuxPaths.VERSIONS_DIR / guid}")
         return 0
 
-    if not HAS_TK:
-        print("[NRBlox-Linux] Install python3-tk to open the GUI.")
-        return 1
+    if "--cli" in args:
+        run_interactive_cli(ctrl)
+        return 0
 
     uri = next((a for a in args if a.startswith(("roblox-player:", "roblox:", "nrblox:"))), None)
     initial_mode = None
@@ -898,8 +972,15 @@ def main():
     elif "-settings" in args or "--settings" in args:
         initial_mode = "settings"
 
-    app = NRBloxLinuxApp(ctrl, initial_mode=initial_mode, launch_uri=uri)
-    app.run()
+    if HAS_TK and (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        try:
+            app = NRBloxLinuxApp(ctrl, initial_mode=initial_mode, launch_uri=uri)
+            app.run()
+            return 0
+        except Exception as e:
+            print(f"[NRBlox-Linux] GUI display unavailable ({e}), opening interactive terminal launcher...")
+
+    run_interactive_cli(ctrl)
     return 0
 
 
