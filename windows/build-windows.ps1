@@ -26,9 +26,18 @@ $Sources = @(
     (Join-Path $PSScriptRoot "src\Program.cs")
 )
 
+$AssetsDir = Join-Path $RepoRoot "assets"
+$AssetsZip = Join-Path $WinBinDir "NRBlox.Assets.zip"
+if (Test-Path $AssetsZip) {
+    Remove-Item $AssetsZip -Force
+}
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::CreateFromDirectory($AssetsDir, $AssetsZip)
+
 & $CscPath /nologo /target:winexe /optimize+ `
     /out:"$OutExe" `
     /win32icon:"$IconPath" `
+    /resource:"$AssetsZip,NRBlox.Assets.zip" `
     /r:"$WpfDir\PresentationFramework.dll" `
     /r:"$WpfDir\PresentationCore.dll" `
     /r:"$WpfDir\WindowsBase.dll" `
@@ -41,5 +50,9 @@ $Sources = @(
     /r:"$FwDir\Microsoft.CSharp.dll" `
     $Sources
 
+if (Test-Path $AssetsZip) {
+    Remove-Item $AssetsZip -Force
+}
+
 Copy-Item -Path $OutExe -Destination (Join-Path $WinBinDir "NRBlox.exe") -Force
-Write-Host "[NRBlox-Windows] Compiled native WPF executable: $OutExe"
+Write-Host "[NRBlox-Windows] Compiled standalone single-file WPF executable: $OutExe"

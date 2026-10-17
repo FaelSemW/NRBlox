@@ -8,6 +8,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Text;
 using System.Web.Script.Serialization;
 
@@ -29,12 +30,17 @@ namespace NRBlox.Windows.Core
                     ? Path.GetDirectoryName(asmLoc)
                     : AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
 
-                if (Directory.Exists(Path.Combine(exeDir, "assets")))
+                if (Directory.Exists(Path.Combine(exeDir, "assets")) || Directory.Exists(Path.Combine(exeDir, "windows")))
                     return exeDir;
                 string parent = Path.GetFullPath(Path.Combine(exeDir, "..", ".."));
                 if (Directory.Exists(Path.Combine(parent, "assets")))
                     return parent;
-                return exeDir;
+
+                // Standalone single-file mode: install/store into %LocalAppData%\NRBlox
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "NRBlox"
+                );
             }
         }
 
@@ -101,7 +107,9 @@ namespace NRBlox.Windows.Core
             {
                 string[] dirs = new string[]
                 {
+                    BaseDir,
                     DataDir,
+                    AssetsDir,
                     ModificationsDir,
                     Path.Combine(ModificationsDir, "ClientSettings"),
                     Path.Combine(ModificationsDir, "content", "sounds"),
@@ -113,6 +121,49 @@ namespace NRBlox.Windows.Core
                 {
                     if (!Directory.Exists(d))
                         Directory.CreateDirectory(d);
+                }
+
+                // If running as a standalone downloaded .exe, copy NRBlox.exe into BaseDir for protocol/shortcut persistence
+                string currentExe = typeof(NRBloxPaths).Assembly.Location;
+                string targetExe = Path.Combine(BaseDir, "NRBlox.exe");
+                if (!string.IsNullOrEmpty(currentExe) &&
+                    File.Exists(currentExe) &&
+                    !string.Equals(Path.GetFullPath(currentExe), Path.GetFullPath(targetExe), StringComparison.OrdinalIgnoreCase))
+                {
+                    try { File.Copy(currentExe, targetExe, true); } catch { }
+                }
+
+                // Auto-extract embedded NRBlox.Assets.zip if assets are not yet extracted
+                string markerIcon = Path.Combine(IconsDir, "IconNRBlox.ico");
+                string markerPlace = Path.Combine(ModsAssetsDir, "places", "OldAvatarBackground.rbxl");
+                if (!File.Exists(markerIcon) || !File.Exists(markerPlace))
+                {
+                    using (Stream resStream = typeof(NRBloxPaths).Assembly.GetManifestResourceStream("NRBlox.Assets.zip"))
+                    {
+                        if (resStream != null)
+                        {
+                            using (ZipArchive archive = new ZipArchive(resStream, ZipArchiveMode.Read))
+                            {
+                                foreach (ZipArchiveEntry entry in archive.Entries)
+                                {
+                                    string rel = entry.FullName.Replace('/', '\\').TrimStart('\\');
+                                    if (string.IsNullOrEmpty(rel) || rel.Contains(".."))
+                                        continue;
+                                    if (string.IsNullOrEmpty(entry.Name) || rel.EndsWith("\\"))
+                                    {
+                                        string subDir = Path.Combine(AssetsDir, rel.TrimEnd('\\'));
+                                        if (!Directory.Exists(subDir)) Directory.CreateDirectory(subDir);
+                                        continue;
+                                    }
+                                    string destFile = Path.Combine(AssetsDir, rel);
+                                    string destParent = Path.GetDirectoryName(destFile);
+                                    if (!string.IsNullOrEmpty(destParent) && !Directory.Exists(destParent))
+                                        Directory.CreateDirectory(destParent);
+                                    entry.ExtractToFile(destFile, true);
+                                }
+                            }
+                        }
+                    }
                 }
             }
             catch { }
