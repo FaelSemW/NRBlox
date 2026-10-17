@@ -1,9 +1,9 @@
 # ⚡ NRBlox — Next-Gen Open-Source Roblox Engine Controller
 
 <p align="center">
+  <a href="https://github.com/FaelSemW/NRBlox/releases/download/v3.0.0/NRBlox.exe"><img src="https://img.shields.io/badge/Download-NRBlox.exe%20(v3.0.0)-2EA44F?style=for-the-badge&logo=windows&logoColor=white" alt="Download NRBlox.exe"></a>
   <a href="https://discord.gg/M8j8JnQSCx"><img src="https://img.shields.io/badge/Discord-Comunidade%20Oficial-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord Oficial"></a>
   <a href="https://github.com/FaelSemW/NRBlox/blob/main/docs/wiki/Home.md"><img src="https://img.shields.io/badge/GitHub%20Wiki-Documenta%C3%A7%C3%A3o%20Completa-00E5FF?style=for-the-badge&logo=github&logoColor=black" alt="Wiki Oficial"></a>
-  <img src="https://img.shields.io/badge/Windows-WPF%20Nativo%20(.exe)-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows WPF">
   <img src="https://img.shields.io/badge/Linux-Sober%20%7C%20Vinegar%20%7C%20Wine64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux Engine">
   <img src="https://img.shields.io/badge/Licen%C3%A7a-MIT%20(100%25%20Open%20Source)-10B981?style=for-the-badge" alt="MIT License">
 </p>
@@ -33,8 +33,8 @@ Toda a documentação detalhada está disponível diretamente na nossa **Wiki no
 
 ## 🚀 Como Usar
 
-### 🪟 No Windows (`NRBlox.exe`)
-1. Execute diretamente **`NRBlox.exe`** na raiz do repositório.
+### 🪟 No Windows (`NRBlox.exe` — 1 Único Executável)
+1. Baixe apenas o executável **[`NRBlox.exe` na página oficial de Releases](https://github.com/FaelSemW/NRBlox/releases/latest)** (ou execute `NRBlox.exe` na raiz do repositório).
 2. Clique em **Launch Roblox** (se o Roblox ainda não estiver instalado no seu PC, o Bootstrapper do NRBlox baixa e extrai automaticamente todos os 21 pacotes oficiais da CDN do Roblox), **Launch Roblox Studio** ou **Configure settings**.
 3. Para compilar o executável nativo WPF a partir do código-fonte C#:
    ```powershell
