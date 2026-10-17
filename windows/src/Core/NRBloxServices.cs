@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.IO.Pipes;
 using System.Net;
 using System.Security.Cryptography;
@@ -464,6 +465,356 @@ namespace NRBlox.Windows.Core
                 }
             }
             return sb.ToString();
+        }
+    }
+
+    public sealed class RobloxPackageEntry
+    {
+        public string Name { get; set; }
+        public string Md5 { get; set; }
+        public long CompressedSize { get; set; }
+        public long UncompressedSize { get; set; }
+    }
+
+    public static class RobloxPackageInstaller
+    {
+        private static readonly string[] CdnBaseUrls = new string[]
+        {
+            "https://setup.rbxcdn.com/channel/common/",
+            "https://setup.rbxcdn.com/"
+        };
+
+        private static readonly Dictionary<string, string> PackageDirectoryMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "RobloxApp.zip", "" },
+            { "RobloxStudio.zip", "" },
+            { "redist.zip", "" },
+            { "shaders.zip", "shaders" },
+            { "ssl.zip", "ssl" },
+            { "WebView2.zip", "" },
+            { "WebView2RuntimeInstaller.zip", "WebView2RuntimeInstaller" },
+            { "content-avatar.zip", @"content\avatar" },
+            { "content-configs.zip", @"content\configs" },
+            { "content-fonts.zip", @"content\fonts" },
+            { "content-sky.zip", @"content\sky" },
+            { "content-sounds.zip", @"content\sounds" },
+            { "content-textures2.zip", @"content\textures" },
+            { "content-models.zip", @"content\models" },
+            { "content-platform-fonts.zip", @"PlatformContent\pc\fonts" },
+            { "content-platform-dictionaries.zip", @"PlatformContent\pc\shared_compression_dictionaries" },
+            { "content-terrain.zip", @"PlatformContent\pc\terrain" },
+            { "content-textures3.zip", @"PlatformContent\pc\textures" },
+            { "extracontent-luapackages.zip", @"ExtraContent\LuaPackages" },
+            { "extracontent-translations.zip", @"ExtraContent\translations" },
+            { "extracontent-models.zip", @"ExtraContent\models" },
+            { "extracontent-textures.zip", @"ExtraContent\textures" },
+            { "extracontent-places.zip", @"ExtraContent\places" },
+            // Studio packages
+            { "RibbonConfig.zip", "RibbonConfig" },
+            { "ApplicationConfig.zip", "ApplicationConfig" },
+            { "BuiltInPlugins.zip", "BuiltInPlugins" },
+            { "BuiltInStandalonePlugins.zip", "BuiltInStandalonePlugins" },
+            { "Plugins.zip", "Plugins" },
+            { "Qml.zip", "Qml" },
+            { "StudioFonts.zip", "StudioFonts" },
+            { "studio-svg-textures.zip", @"content\studio_svg_textures" },
+            { "content-qt_translations.zip", @"content\qt_translations" },
+            { "content-api-docs.zip", @"content\api_docs" },
+            { "extracontent-scripts.zip", @"ExtraContent\scripts" }
+        };
+
+        public static string ResolveTargetVersionGuid(bool isStudio, bool lockVersion)
+        {
+            if (lockVersion && !string.IsNullOrEmpty(NRBloxPaths.TargetVersionGuid))
+            {
+                string lockedDir = Path.Combine(NRBloxPaths.SystemRobloxRoot, "Versions", NRBloxPaths.TargetVersionGuid);
+                string exeName = isStudio ? "RobloxStudioBeta.exe" : "RobloxPlayerBeta.exe";
+                if (File.Exists(Path.Combine(lockedDir, exeName)))
+                    return NRBloxPaths.TargetVersionGuid;
+            }
+
+            try
+            {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                string binaryType = isStudio ? "WindowsStudio64" : "WindowsPlayer";
+                string url = "https://clientsettingscdn.roblox.com/v2/client-version/" + binaryType;
+                using (var wc = new WebClient())
+                {
+                    wc.Encoding = Encoding.UTF8;
+                    wc.Headers.Add("User-Agent", "Roblox/WinInet");
+                    string json = wc.DownloadString(url);
+                    var ser = new JavaScriptSerializer();
+                    var dict = ser.Deserialize<Dictionary<string, object>>(json);
+                    if (dict != null && dict.ContainsKey("clientVersionUpload"))
+                    {
+                        string guid = Convert.ToString(dict["clientVersionUpload"]);
+                        if (!string.IsNullOrEmpty(guid) && guid.StartsWith("version-"))
+                        {
+                            if (!isStudio)
+                                NRBloxPaths.TargetVersionGuid = guid;
+                            return guid;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            return NRBloxPaths.TargetVersionGuid;
+        }
+
+        public static bool IsClientInstalled(string versionDir, bool isStudio)
+        {
+            if (string.IsNullOrEmpty(versionDir) || !Directory.Exists(versionDir))
+                return false;
+            string exeName = isStudio ? "RobloxStudioBeta.exe" : "RobloxPlayerBeta.exe";
+            return File.Exists(Path.Combine(versionDir, exeName));
+        }
+
+        public static void InstallOrUpdateClient(
+            string versionGuid,
+            string versionDir,
+            Action<double, string, string> onProgress,
+            Func<bool> isCancelled)
+        {
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+            ServicePointManager.DefaultConnectionLimit = 16;
+
+            if (onProgress != null)
+                onProgress(0.04, "Connecting to Roblox CDN...", "Fetching package manifest for " + versionGuid);
+
+            string manifestText = null;
+            string activeBaseUrl = CdnBaseUrls[0];
+
+            foreach (string baseUrl in CdnBaseUrls)
+            {
+                try
+                {
+                    using (var wc = new WebClient())
+                    {
+                        wc.Encoding = Encoding.UTF8;
+                        wc.Headers.Add("User-Agent", "Roblox/WinInet");
+                        manifestText = wc.DownloadString(baseUrl + versionGuid + "-rbxPkgManifest.txt");
+                        if (!string.IsNullOrEmpty(manifestText) && manifestText.StartsWith("v0"))
+                        {
+                            activeBaseUrl = baseUrl;
+                            break;
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (string.IsNullOrEmpty(manifestText))
+                throw new InvalidOperationException("Failed to download package manifest for " + versionGuid + " from setup.rbxcdn.com.");
+
+            List<RobloxPackageEntry> packages = ParseManifest(manifestText);
+            if (packages.Count == 0)
+                throw new InvalidOperationException("No valid .zip packages found in manifest for " + versionGuid + ".");
+
+            string cacheDir = NRBloxPaths.DownloadsCacheDir;
+            if (!Directory.Exists(cacheDir))
+                Directory.CreateDirectory(cacheDir);
+            if (!Directory.Exists(versionDir))
+                Directory.CreateDirectory(versionDir);
+
+            long totalCompressedBytes = 0;
+            foreach (var p in packages)
+                totalCompressedBytes += Math.Max(1, p.CompressedSize);
+
+            long downloadedBytesSoFar = 0;
+            double totalMb = totalCompressedBytes / (1024.0 * 1024.0);
+
+            // Step 1: Download all .zip packages (progress 0.05 -> 0.78)
+            for (int i = 0; i < packages.Count; i++)
+            {
+                if (isCancelled != null && isCancelled())
+                    return;
+
+                RobloxPackageEntry pkg = packages[i];
+                string cachedFile = Path.Combine(cacheDir, pkg.Md5);
+
+                bool cacheValid = false;
+                if (File.Exists(cachedFile))
+                {
+                    try
+                    {
+                        var fi = new FileInfo(cachedFile);
+                        if (fi.Length == pkg.CompressedSize && VerifyMd5(cachedFile, pkg.Md5))
+                            cacheValid = true;
+                    }
+                    catch { }
+                }
+
+                if (cacheValid)
+                {
+                    downloadedBytesSoFar += pkg.CompressedSize;
+                    double ratio = 0.05 + 0.73 * ((double)downloadedBytesSoFar / totalCompressedBytes);
+                    double curMb = downloadedBytesSoFar / (1024.0 * 1024.0);
+                    if (onProgress != null)
+                        onProgress(ratio, "Downloading Roblox (" + (i + 1) + "/" + packages.Count + ")...",
+                            string.Format("Verified cached {0} ({1:F1} MB / {2:F1} MB)", pkg.Name, curMb, totalMb));
+                }
+                else
+                {
+                    string pkgUrl = activeBaseUrl + versionGuid + "-" + pkg.Name;
+                    string tempFile = cachedFile + ".tmp";
+                    if (File.Exists(tempFile))
+                    {
+                        try { File.Delete(tempFile); } catch { }
+                    }
+
+                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(pkgUrl);
+                    req.UserAgent = "Roblox/WinInet";
+                    req.Timeout = 30000;
+                    req.ReadWriteTimeout = 30000;
+
+                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                    using (Stream netStream = resp.GetResponseStream())
+                    using (FileStream fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, 65536))
+                    {
+                        byte[] buffer = new byte[65536];
+                        int read;
+                        long pkgRead = 0;
+                        DateTime lastUiUpdate = DateTime.MinValue;
+
+                        while ((read = netStream.Read(buffer, 0, buffer.Length)) > 0)
+                        {
+                            if (isCancelled != null && isCancelled())
+                                return;
+
+                            fs.Write(buffer, 0, read);
+                            pkgRead += read;
+                            long currentTotal = downloadedBytesSoFar + pkgRead;
+
+                            if ((DateTime.UtcNow - lastUiUpdate).TotalMilliseconds >= 60)
+                            {
+                                lastUiUpdate = DateTime.UtcNow;
+                                double ratio = 0.05 + 0.73 * Math.Min(1.0, (double)currentTotal / totalCompressedBytes);
+                                double curMb = currentTotal / (1024.0 * 1024.0);
+                                if (onProgress != null)
+                                    onProgress(ratio, "Downloading Roblox (" + (i + 1) + "/" + packages.Count + ")...",
+                                        string.Format("{0} — {1:F1} MB / {2:F1} MB", pkg.Name, curMb, totalMb));
+                            }
+                        }
+                    }
+
+                    if (File.Exists(cachedFile))
+                        File.Delete(cachedFile);
+                    File.Move(tempFile, cachedFile);
+                    downloadedBytesSoFar += pkg.CompressedSize;
+                }
+            }
+
+            // Step 2: Extract all .zip packages into their mapped folders inside versionDir (progress 0.78 -> 0.96)
+            for (int i = 0; i < packages.Count; i++)
+            {
+                if (isCancelled != null && isCancelled())
+                    return;
+
+                RobloxPackageEntry pkg = packages[i];
+                string cachedFile = Path.Combine(cacheDir, pkg.Md5);
+                if (!File.Exists(cachedFile))
+                    continue;
+
+                string subFolder = "";
+                if (PackageDirectoryMap.ContainsKey(pkg.Name))
+                    subFolder = PackageDirectoryMap[pkg.Name];
+
+                string targetExtractDir = string.IsNullOrEmpty(subFolder)
+                    ? versionDir
+                    : Path.Combine(versionDir, subFolder);
+
+                if (!Directory.Exists(targetExtractDir))
+                    Directory.CreateDirectory(targetExtractDir);
+
+                double ratio = 0.78 + 0.18 * ((double)(i + 1) / packages.Count);
+                if (onProgress != null)
+                    onProgress(ratio, "Extracting Roblox packages (" + (i + 1) + "/" + packages.Count + ")...",
+                        "Extracting " + pkg.Name + "...");
+
+                ExtractZipArchiveSafe(cachedFile, targetExtractDir);
+            }
+
+            // Step 3: Write AppSettings.xml & Register URI protocols
+            string appSettingsPath = Path.Combine(versionDir, "AppSettings.xml");
+            File.WriteAllText(appSettingsPath,
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<Settings>\r\n\t<ContentFolder>content</ContentFolder>\r\n\t<BaseUrl>http://www.roblox.com</BaseUrl>\r\n</Settings>\r\n",
+                Encoding.UTF8);
+
+            try
+            {
+                SystemIntegrationService.RegisterWindowsProtocols();
+            }
+            catch { }
+        }
+
+        private static List<RobloxPackageEntry> ParseManifest(string manifestText)
+        {
+            var list = new List<RobloxPackageEntry>();
+            string[] lines = manifestText.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length < 5)
+                return list;
+
+            int idx = 1; // skip "v0"
+            while (idx + 3 < lines.Length)
+            {
+                string name = lines[idx].Trim();
+                string md5 = lines[idx + 1].Trim();
+                long compSize = 0;
+                long uncompSize = 0;
+                long.TryParse(lines[idx + 2].Trim(), out compSize);
+                long.TryParse(lines[idx + 3].Trim(), out uncompSize);
+                idx += 4;
+
+                if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                {
+                    list.Add(new RobloxPackageEntry
+                    {
+                        Name = name,
+                        Md5 = md5,
+                        CompressedSize = compSize,
+                        UncompressedSize = uncompSize
+                    });
+                }
+            }
+            return list;
+        }
+
+        private static void ExtractZipArchiveSafe(string zipFilePath, string targetFolder)
+        {
+            using (ZipArchive archive = ZipFile.OpenRead(zipFilePath))
+            {
+                foreach (ZipArchiveEntry entry in archive.Entries)
+                {
+                    if (string.IsNullOrEmpty(entry.Name) && entry.FullName.EndsWith("/"))
+                        continue;
+
+                    string relativePath = entry.FullName.Replace('/', '\\').TrimStart('\\');
+                    if (relativePath.Contains(".."))
+                        continue;
+
+                    string destFile = Path.Combine(targetFolder, relativePath);
+                    string destDir = Path.GetDirectoryName(destFile);
+                    if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
+                        Directory.CreateDirectory(destDir);
+
+                    entry.ExtractToFile(destFile, true);
+                }
+            }
+        }
+
+        private static bool VerifyMd5(string filePath, string expectedMd5)
+        {
+            if (string.IsNullOrEmpty(expectedMd5)) return true;
+            using (var md5 = MD5.Create())
+            using (var stream = File.OpenRead(filePath))
+            {
+                byte[] hash = md5.ComputeHash(stream);
+                var sb = new StringBuilder(hash.Length * 2);
+                for (int i = 0; i < hash.Length; i++)
+                    sb.Append(hash[i].ToString("x2"));
+                return string.Equals(sb.ToString(), expectedMd5, StringComparison.OrdinalIgnoreCase);
+            }
         }
     }
 }

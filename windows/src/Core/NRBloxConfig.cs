@@ -18,7 +18,7 @@ namespace NRBlox.Windows.Core
         public static readonly string DiscordUrl = "https://discord.gg/M8j8JnQSCx";
         public static readonly string GitHubRepoUrl = "https://github.com/FaelSemW/NRBlox";
         public static readonly string GitHubWikiUrl = "https://github.com/FaelSemW/NRBlox/blob/main/docs/wiki/Home.md";
-        public static readonly string TargetVersionGuid = "version-11f155f3450f4c8e";
+        public static string TargetVersionGuid = "version-11f155f3450f4c8e";
 
         public static string BaseDir
         {
@@ -39,6 +39,17 @@ namespace NRBlox.Windows.Core
         }
 
         public static string DataDir { get { return Path.Combine(BaseDir, "data"); } }
+        public static string DownloadsCacheDir
+        {
+            get
+            {
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Roblox",
+                    "Downloads"
+                );
+            }
+        }
         public static string AssetsDir { get { return Path.Combine(BaseDir, "assets"); } }
         public static string ModsAssetsDir { get { return Path.Combine(AssetsDir, "mods"); } }
         public static string IconsDir { get { return Path.Combine(AssetsDir, "icons"); } }
@@ -64,7 +75,7 @@ namespace NRBlox.Windows.Core
         public static string GetRobloxVersionDir()
         {
             string preferred = Path.Combine(SystemRobloxRoot, "Versions", TargetVersionGuid);
-            if (Directory.Exists(preferred))
+            if (Directory.Exists(preferred) && File.Exists(Path.Combine(preferred, "RobloxPlayerBeta.exe")))
                 return preferred;
 
             string versionsRoot = Path.Combine(SystemRobloxRoot, "Versions");

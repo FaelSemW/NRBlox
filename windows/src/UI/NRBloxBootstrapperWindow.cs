@@ -8,6 +8,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -27,11 +28,10 @@ namespace NRBlox.Windows.UI
 
         private TextBlock _statusText;
         private TextBlock _subStatusText;
+        private TextBlock _verLabel;
         private Border _progressFill;
         private Border _progressTrack;
-        private DispatcherTimer _stepTimer;
-        private int _stepIndex;
-        private bool _cancelled;
+        private volatile bool _cancelled;
 
         public NRBloxBootstrapperWindow(NRBloxSettings settings, FastFlagEngine fastFlags, ModEngine mods, string launchArgs, bool isStudio, bool isPreviewOnly = false)
         {
@@ -55,6 +55,7 @@ namespace NRBlox.Windows.UI
 
             BuildLayout();
             Loaded += OnWindowLoaded;
+            Closing += (s, e) => { _cancelled = true; };
         }
 
         private void BuildLayout()
@@ -82,7 +83,7 @@ namespace NRBlox.Windows.UI
             // Row 1: Status
             var statusStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 12, 0, 10) };
             _statusText = NRBloxTheme.CreateText(_isPreviewOnly ? "Bootstrapper Preview Mode" : "Starting Roblox...", 14, FontWeights.Normal, "TextPrimaryBrush");
-            _subStatusText = NRBloxTheme.CreateText("Applying FastFlags and client modifications...", 12, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 3, 0, 0));
+            _subStatusText = NRBloxTheme.CreateText("Checking client version and local installation...", 12, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 3, 0, 0));
             statusStack.Children.Add(_statusText);
             statusStack.Children.Add(_subStatusText);
             Grid.SetRow(statusStack, 1);
@@ -101,7 +102,7 @@ namespace NRBlox.Windows.UI
             _progressFill = new Border
             {
                 HorizontalAlignment = HorizontalAlignment.Left,
-                Width = _isPreviewOnly ? 220 : 40,
+                Width = _isPreviewOnly ? 220 : 28,
                 Height = 6,
                 CornerRadius = new CornerRadius(3)
             };
@@ -116,15 +117,14 @@ namespace NRBlox.Windows.UI
             footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            var verLabel = NRBloxTheme.CreateText(NRBloxPaths.TargetVersionGuid, 11.5, FontWeights.Normal, "TextSecondaryBrush");
-            verLabel.VerticalAlignment = VerticalAlignment.Center;
-            Grid.SetColumn(verLabel, 0);
-            footerGrid.Children.Add(verLabel);
+            _verLabel = NRBloxTheme.CreateText(NRBloxPaths.TargetVersionGuid, 11.5, FontWeights.Normal, "TextSecondaryBrush");
+            _verLabel.VerticalAlignment = VerticalAlignment.Center;
+            Grid.SetColumn(_verLabel, 0);
+            footerGrid.Children.Add(_verLabel);
 
             var cancelBtn = NRBloxTheme.CreateStyledButton("Cancel", false, (s, e) =>
             {
                 _cancelled = true;
-                if (_stepTimer != null) _stepTimer.Stop();
                 Close();
             });
             Grid.SetColumn(cancelBtn, 1);
@@ -140,54 +140,116 @@ namespace NRBlox.Windows.UI
         {
             if (_isPreviewOnly) return;
 
-            _stepIndex = 0;
-            _stepTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(220) };
-            _stepTimer.Tick += OnStepTick;
-            _stepTimer.Start();
+            ThreadPool.QueueUserWorkItem(_ => RunBootstrapPipeline());
         }
 
-        private void SetProgress(double ratio, string status, string sub)
-        {
-            double maxW = _progressTrack.ActualWidth > 0 ? _progressTrack.ActualWidth : 410;
-            _progressFill.Width = Math.Max(16, maxW * Math.Min(1.0, Math.Max(0.0, ratio)));
-            _statusText.Text = status;
-            _subStatusText.Text = sub;
-        }
-
-        private void OnStepTick(object sender, EventArgs e)
+        private void UpdateUiProgress(double ratio, string status, string sub, string verGuid = null)
         {
             if (_cancelled) return;
-            _stepIndex++;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (_cancelled) return;
+                double maxW = _progressTrack.ActualWidth > 0 ? _progressTrack.ActualWidth : 410;
+                _progressFill.Width = Math.Max(16, maxW * Math.Min(1.0, Math.Max(0.0, ratio)));
+                _statusText.Text = status;
+                _subStatusText.Text = sub;
+                if (!string.IsNullOrEmpty(verGuid) && _verLabel != null)
+                    _verLabel.Text = verGuid;
+            }), DispatcherPriority.Background);
+        }
 
-            if (_stepIndex == 1)
+        private void RunBootstrapPipeline()
+        {
+            try
             {
-                SetProgress(0.30, "Verifying client installation...", "Checking " + NRBloxPaths.TargetVersionGuid);
+                UpdateUiProgress(0.05, "Connecting to Roblox...", "Checking latest deployment version on clientsettingscdn.roblox.com...");
+                string versionGuid = RobloxPackageInstaller.ResolveTargetVersionGuid(_isStudio, _settings.LockRobloxVersion);
+                string versionDir = Path.Combine(NRBloxPaths.SystemRobloxRoot, "Versions", versionGuid);
+
+                // If another installed version exists and LockRobloxVersion is enabled, use it if found
+                if (!RobloxPackageInstaller.IsClientInstalled(versionDir, _isStudio) && !_settings.ForceRobloxReinstall)
+                {
+                    string existingDir = NRBloxPaths.GetRobloxVersionDir();
+                    if (RobloxPackageInstaller.IsClientInstalled(existingDir, _isStudio))
+                    {
+                        versionDir = existingDir;
+                        versionGuid = Path.GetFileName(existingDir);
+                    }
+                }
+
+                UpdateUiProgress(0.08, "Verifying client installation...", "Checking " + versionGuid, versionGuid);
+
+                bool needsInstall = _settings.ForceRobloxReinstall || !RobloxPackageInstaller.IsClientInstalled(versionDir, _isStudio);
+                if (needsInstall)
+                {
+                    RobloxPackageInstaller.InstallOrUpdateClient(
+                        versionGuid,
+                        versionDir,
+                        (ratio, status, sub) => UpdateUiProgress(ratio, status, sub, versionGuid),
+                        () => _cancelled
+                    );
+
+                    if (_cancelled) return;
+
+                    if (_settings.ForceRobloxReinstall)
+                    {
+                        _settings.ForceRobloxReinstall = false;
+                        JsonHelper.Save(NRBloxPaths.SettingsFile, _settings);
+                    }
+                }
+                else
+                {
+                    Thread.Sleep(160);
+                }
+
+                if (_cancelled) return;
+
+                UpdateUiProgress(0.96, "Applying Engine Settings & FastFlags...",
+                    string.Format("Syncing {0} FastFlags to ClientAppSettings.json", _fastFlags.Flags.Count), versionGuid);
                 SystemIntegrationService.VerifyClientInstallation();
-            }
-            else if (_stepIndex == 2)
-            {
-                SetProgress(0.65, "Applying Engine Settings & FastFlags...", string.Format("Syncing {0} FastFlags to ClientAppSettings.json", _fastFlags.Flags.Count));
                 _fastFlags.ApplySettingsToFlags();
                 _fastFlags.SaveAndSync();
-            }
-            else if (_stepIndex == 3)
-            {
-                SetProgress(0.90, "Applying Mods & Integrations...", "Synchronizing client modifications...");
+                Thread.Sleep(120);
+
+                if (_cancelled) return;
+
+                UpdateUiProgress(0.99, "Applying Mods & Integrations...", "Synchronizing client modifications...", versionGuid);
                 _mods.ApplyAndSyncMods();
                 if (_settings.MultiInstanceLaunching)
                     SystemIntegrationService.SetMultiInstanceMutex(true);
+                Thread.Sleep(120);
+
+                if (_cancelled) return;
+
+                string finalVersionDir = versionDir;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (_cancelled) return;
+                    ExecuteRobloxProcess(finalVersionDir);
+                    Close();
+                }));
             }
-            else if (_stepIndex >= 4)
+            catch (Exception ex)
             {
-                _stepTimer.Stop();
-                ExecuteRobloxProcess();
-                Close();
+                if (_cancelled) return;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    MessageBox.Show(
+                        "Failed to download or initialize Roblox:\n" + ex.Message,
+                        "NRBlox Bootstrapper",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error
+                    );
+                    Close();
+                }));
             }
         }
 
-        private void ExecuteRobloxProcess()
+        private void ExecuteRobloxProcess(string versionDir)
         {
-            string versionDir = NRBloxPaths.GetRobloxVersionDir();
+            if (string.IsNullOrEmpty(versionDir))
+                versionDir = NRBloxPaths.GetRobloxVersionDir();
+
             string exeName = _isStudio ? "RobloxStudioBeta.exe" : "RobloxPlayerBeta.exe";
             string targetExe = Path.Combine(versionDir, exeName);
 

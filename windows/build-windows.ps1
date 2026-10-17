@@ -36,6 +36,8 @@ $Sources = @(
     /r:"$FwDir\System.Web.Extensions.dll" `
     /r:"$FwDir\System.Drawing.dll" `
     /r:"$FwDir\System.Windows.Forms.dll" `
+    /r:"$FwDir\System.IO.Compression.dll" `
+    /r:"$FwDir\System.IO.Compression.FileSystem.dll" `
     /r:"$FwDir\Microsoft.CSharp.dll" `
     $Sources
 
