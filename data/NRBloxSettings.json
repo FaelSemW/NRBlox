@@ -1,0 +1,35 @@
+﻿{
+  "ThemeMode": "Dark",
+  "BootstrapperStyle": "NRBlox Cyber Glass",
+  "Channel": "production",
+  "LockRobloxVersion": true,
+  "MultiInstanceLaunching": false,
+  "ConfirmLaunches": false,
+  "UseFastFlagManager": true,
+  "TargetFps": 240,
+  "RenderingMode": "D3D11",
+  "LightingMode": "Padrão",
+  "MsaaMode": "4",
+  "TextureQuality": "3",
+  "DisableDpiScale": true,
+  "ManualFullscreen": true,
+  "DisablePostFx": false,
+  "DisableTelemetry": true,
+  "MtuSize": 0,
+  "UseClassicDeathSound": false,
+  "UseOldCharacterSounds": false,
+  "CursorType": "Default",
+  "UseOldAvatarBackground": false,
+  "DisableDesktopAppPatch": false,
+  "CustomFontPath": "",
+  "EnableActivityTracking": true,
+  "EnableDiscordRichPresence": true,
+  "ShowServerDetails": true,
+  "ShowAccountOnRichPresence": true,
+  "CustomIntegrations": [
+    
+  ],
+  "AppliedModManifest": [
+    "ClientSettings\\ClientAppSettings.json"
+  ]
+}

@@ -1,0 +1,619 @@
+// ============================================================================
+// NRBlox (Windows Native Edition) — Core Configuration, FastFlags & Mod Engine
+// Author: FaelSemW (https://github.com/FaelSemW/NRBlox)
+// Community Discord: https://discord.gg/M8j8JnQSCx
+// License: MIT (100% Open Source)
+// ============================================================================
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Web.Script.Serialization;
+
+namespace NRBlox.Windows.Core
+{
+    public static class NRBloxPaths
+    {
+        public static readonly string DiscordUrl = "https://discord.gg/M8j8JnQSCx";
+        public static readonly string GitHubRepoUrl = "https://github.com/FaelSemW/NRBlox";
+        public static readonly string GitHubWikiUrl = "https://github.com/FaelSemW/NRBlox/wiki";
+        public static readonly string TargetVersionGuid = "version-11f155f3450f4c8e";
+
+        public static string BaseDir
+        {
+            get
+            {
+                string asmLoc = typeof(NRBloxPaths).Assembly.Location;
+                string exeDir = !string.IsNullOrEmpty(asmLoc)
+                    ? Path.GetDirectoryName(asmLoc)
+                    : AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
+
+                if (Directory.Exists(Path.Combine(exeDir, "assets")))
+                    return exeDir;
+                string parent = Path.GetFullPath(Path.Combine(exeDir, "..", ".."));
+                if (Directory.Exists(Path.Combine(parent, "assets")))
+                    return parent;
+                return exeDir;
+            }
+        }
+
+        public static string DataDir { get { return Path.Combine(BaseDir, "data"); } }
+        public static string AssetsDir { get { return Path.Combine(BaseDir, "assets"); } }
+        public static string ModsAssetsDir { get { return Path.Combine(AssetsDir, "mods"); } }
+        public static string IconsDir { get { return Path.Combine(AssetsDir, "icons"); } }
+        public static string ModificationsDir { get { return Path.Combine(DataDir, "Modifications"); } }
+        public static string SettingsFile { get { return Path.Combine(DataDir, "NRBloxSettings.json"); } }
+        public static string ServerHistoryFile { get { return Path.Combine(DataDir, "ServerHistory.json"); } }
+        public static string LocalClientAppSettingsFile
+        {
+            get { return Path.Combine(ModificationsDir, "ClientSettings", "ClientAppSettings.json"); }
+        }
+
+        public static string SystemRobloxRoot
+        {
+            get
+            {
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Roblox"
+                );
+            }
+        }
+
+        public static string GetRobloxVersionDir()
+        {
+            string preferred = Path.Combine(SystemRobloxRoot, "Versions", TargetVersionGuid);
+            if (Directory.Exists(preferred))
+                return preferred;
+
+            string versionsRoot = Path.Combine(SystemRobloxRoot, "Versions");
+            if (Directory.Exists(versionsRoot))
+            {
+                foreach (string dir in Directory.GetDirectories(versionsRoot, "version-*"))
+                {
+                    if (File.Exists(Path.Combine(dir, "RobloxPlayerBeta.exe")))
+                        return dir;
+                }
+            }
+            return preferred;
+        }
+
+        public static string GetRobloxLogsDir()
+        {
+            return Path.Combine(SystemRobloxRoot, "logs");
+        }
+
+        public static void EnsureDirectories()
+        {
+            string[] dirs = new string[]
+            {
+                DataDir,
+                ModificationsDir,
+                Path.Combine(ModificationsDir, "ClientSettings"),
+                Path.Combine(ModificationsDir, "content", "sounds"),
+                Path.Combine(ModificationsDir, "content", "fonts"),
+                Path.Combine(ModificationsDir, "content", "textures", "Cursors", "KeyboardMouse"),
+                Path.Combine(ModificationsDir, "ExtraContent", "places")
+            };
+            foreach (string d in dirs)
+            {
+                if (!Directory.Exists(d))
+                    Directory.CreateDirectory(d);
+            }
+        }
+    }
+
+    public sealed class NRBloxSettings
+    {
+        // UI & Theme ("Dark" or "Light")
+        public string ThemeMode { get; set; }
+        public string BootstrapperStyle { get; set; }
+        public string Channel { get; set; }
+        public bool LockRobloxVersion { get; set; }
+        public bool MultiInstanceLaunching { get; set; }
+        public bool ConfirmLaunches { get; set; }
+
+        // FastFlag Presets
+        public bool UseFastFlagManager { get; set; }
+        public int TargetFps { get; set; }
+        public string RenderingMode { get; set; }
+        public string LightingMode { get; set; }
+        public string MsaaMode { get; set; }
+        public string TextureQuality { get; set; }
+        public bool DisableDpiScale { get; set; }
+        public bool ManualFullscreen { get; set; }
+        public bool DisablePostFx { get; set; }
+        public bool DisableTelemetry { get; set; }
+        public int MtuSize { get; set; }
+
+        // Mods & Customizations
+        public bool UseClassicDeathSound { get; set; }
+        public bool UseOldCharacterSounds { get; set; }
+        public string CursorType { get; set; }
+        public bool UseOldAvatarBackground { get; set; }
+        public bool DisableDesktopAppPatch { get; set; }
+        public string CustomFontPath { get; set; }
+
+        // Activity & Integrations
+        public bool EnableActivityTracking { get; set; }
+        public bool EnableDiscordRichPresence { get; set; }
+        public bool ShowServerDetails { get; set; }
+        public bool ShowAccountOnRichPresence { get; set; }
+        public List<string> CustomIntegrations { get; set; }
+        public List<string> AppliedModManifest { get; set; }
+
+        public NRBloxSettings()
+        {
+            ThemeMode = "Dark";
+            BootstrapperStyle = "NRBlox Cyber Glass";
+            Channel = "production";
+            LockRobloxVersion = true;
+            MultiInstanceLaunching = false;
+            ConfirmLaunches = false;
+
+            UseFastFlagManager = true;
+            TargetFps = 240;
+            RenderingMode = "D3D11";
+            LightingMode = "Padrão";
+            MsaaMode = "4";
+            TextureQuality = "3";
+            DisableDpiScale = true;
+            ManualFullscreen = true;
+            DisablePostFx = false;
+            DisableTelemetry = true;
+            MtuSize = 0;
+
+            UseClassicDeathSound = false;
+            UseOldCharacterSounds = false;
+            CursorType = "Default";
+            UseOldAvatarBackground = false;
+            DisableDesktopAppPatch = false;
+            CustomFontPath = "";
+
+            EnableActivityTracking = true;
+            EnableDiscordRichPresence = true;
+            ShowServerDetails = true;
+            ShowAccountOnRichPresence = true;
+            CustomIntegrations = new List<string>();
+            AppliedModManifest = new List<string>();
+        }
+    }
+
+    public static class JsonHelper
+    {
+        private static readonly JavaScriptSerializer Serializer = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+
+        public static T LoadOrCreate<T>(string path) where T : new()
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    string raw = File.ReadAllText(path, Encoding.UTF8);
+                    T obj = Serializer.Deserialize<T>(raw);
+                    if (obj != null) return obj;
+                }
+            }
+            catch { }
+            T def = new T();
+            Save(path, def);
+            return def;
+        }
+
+        public static void Save(string path, object data)
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+                string raw = Serializer.Serialize(data);
+                File.WriteAllText(path, FormatJson(raw), Encoding.UTF8);
+            }
+            catch { }
+        }
+
+        public static Dictionary<string, string> LoadStringDict(string path)
+        {
+            var result = new Dictionary<string, string>(StringComparer.Ordinal);
+            try
+            {
+                if (File.Exists(path))
+                {
+                    string raw = File.ReadAllText(path, Encoding.UTF8);
+                    var parsed = Serializer.Deserialize<Dictionary<string, object>>(raw);
+                    if (parsed != null)
+                    {
+                        foreach (var kv in parsed)
+                        {
+                            result[kv.Key] = kv.Value != null ? kv.Value.ToString() : "";
+                        }
+                    }
+                }
+            }
+            catch { }
+            return result;
+        }
+
+        public static void SaveStringDict(string path, Dictionary<string, string> dict)
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+
+                var sb = new StringBuilder();
+                sb.AppendLine("{");
+                var keys = new List<string>(dict.Keys);
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    string k = EscapeJson(keys[i]);
+                    string v = EscapeJson(dict[keys[i]] ?? "");
+                    sb.Append("  \"").Append(k).Append("\": \"").Append(v).Append("\"");
+                    if (i < keys.Count - 1) sb.Append(",");
+                    sb.AppendLine();
+                }
+                sb.AppendLine("}");
+                File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
+            }
+            catch { }
+        }
+
+        private static string EscapeJson(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            return s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n");
+        }
+
+        public static string FormatJson(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return "{}";
+            var sb = new StringBuilder();
+            int indent = 0;
+            bool inQuotes = false;
+            for (int i = 0; i < json.Length; i++)
+            {
+                char ch = json[i];
+                if (ch == '"' && (i == 0 || json[i - 1] != '\\'))
+                {
+                    inQuotes = !inQuotes;
+                    sb.Append(ch);
+                }
+                else if (!inQuotes)
+                {
+                    if (ch == '{' || ch == '[')
+                    {
+                        sb.Append(ch);
+                        sb.AppendLine();
+                        indent++;
+                        sb.Append(new string(' ', indent * 2));
+                    }
+                    else if (ch == '}' || ch == ']')
+                    {
+                        sb.AppendLine();
+                        indent = Math.Max(0, indent - 1);
+                        sb.Append(new string(' ', indent * 2));
+                        sb.Append(ch);
+                    }
+                    else if (ch == ',')
+                    {
+                        sb.Append(ch);
+                        sb.AppendLine();
+                        sb.Append(new string(' ', indent * 2));
+                    }
+                    else if (ch == ':')
+                    {
+                        sb.Append(": ");
+                    }
+                    else
+                    {
+                        sb.Append(ch);
+                    }
+                }
+                else
+                {
+                    sb.Append(ch);
+                }
+            }
+            return sb.ToString();
+        }
+    }
+
+    public sealed class FastFlagEngine
+    {
+        public Dictionary<string, string> Flags { get; private set; }
+        private readonly NRBloxSettings _settings;
+
+        public FastFlagEngine(NRBloxSettings settings)
+        {
+            _settings = settings;
+            Flags = new Dictionary<string, string>(StringComparer.Ordinal);
+            Load();
+        }
+
+        public void Load()
+        {
+            NRBloxPaths.EnsureDirectories();
+            string versionClientSettings = Path.Combine(NRBloxPaths.GetRobloxVersionDir(), "ClientSettings", "ClientAppSettings.json");
+
+            if (File.Exists(NRBloxPaths.LocalClientAppSettingsFile))
+            {
+                Flags = JsonHelper.LoadStringDict(NRBloxPaths.LocalClientAppSettingsFile);
+            }
+            else if (File.Exists(versionClientSettings))
+            {
+                Flags = JsonHelper.LoadStringDict(versionClientSettings);
+                SaveAndSync();
+            }
+            else
+            {
+                ApplySettingsToFlags();
+                SaveAndSync();
+            }
+        }
+
+        public void ApplySettingsToFlags()
+        {
+            // FPS Unlocker
+            SetOrRemove("DFIntTaskSchedulerTargetFps", _settings.TargetFps > 0 ? _settings.TargetFps.ToString() : null);
+
+            // Fullscreen & DPI
+            SetOrRemove("FFlagHandleAltEnterFullscreenManually", _settings.ManualFullscreen ? "False" : null);
+            SetOrRemove("DFFlagDisableDPIScale", _settings.DisableDpiScale ? "True" : null);
+
+            // MSAA
+            SetOrRemove("FIntDebugForceMSAASamples", (_settings.MsaaMode == "Automático" || string.IsNullOrEmpty(_settings.MsaaMode)) ? null : _settings.MsaaMode);
+
+            // Texture Quality
+            if (_settings.TextureQuality == "Automático" || string.IsNullOrEmpty(_settings.TextureQuality))
+            {
+                SetOrRemove("DFFlagTextureQualityOverrideEnabled", null);
+                SetOrRemove("DFIntTextureQualityOverride", null);
+            }
+            else
+            {
+                SetOrRemove("DFFlagTextureQualityOverrideEnabled", "True");
+                SetOrRemove("DFIntTextureQualityOverride", _settings.TextureQuality);
+            }
+
+            // Rendering API
+            SetOrRemove("FFlagDebugGraphicsPreferD3D11", null);
+            SetOrRemove("FFlagDebugGraphicsPreferD3D11FL10", null);
+            SetOrRemove("FFlagDebugGraphicsPreferVulkan", null);
+            SetOrRemove("FFlagDebugGraphicsPreferOpenGL", null);
+            SetOrRemove("FFlagDebugGraphicsDisableDirect3D11", null);
+
+            if (_settings.RenderingMode == "D3D11")
+                SetOrRemove("FFlagDebugGraphicsPreferD3D11", "True");
+            else if (_settings.RenderingMode == "D3D10")
+                SetOrRemove("FFlagDebugGraphicsPreferD3D11FL10", "True");
+            else if (_settings.RenderingMode == "Vulkan")
+            {
+                SetOrRemove("FFlagDebugGraphicsPreferVulkan", "True");
+                SetOrRemove("FFlagDebugGraphicsDisableDirect3D11", "True");
+            }
+            else if (_settings.RenderingMode == "OpenGL")
+            {
+                SetOrRemove("FFlagDebugGraphicsPreferOpenGL", "True");
+                SetOrRemove("FFlagDebugGraphicsDisableDirect3D11", "True");
+            }
+
+            // Lighting Mode
+            SetOrRemove("DFFlagDebugRenderForceTechnologyVoxel", null);
+            SetOrRemove("FFlagDebugForceFutureIsBrightPhase2", null);
+            SetOrRemove("FFlagDebugForceFutureIsBrightPhase3", null);
+
+            if (_settings.LightingMode == "Voxel")
+                SetOrRemove("DFFlagDebugRenderForceTechnologyVoxel", "True");
+            else if (_settings.LightingMode == "ShadowMap")
+                SetOrRemove("FFlagDebugForceFutureIsBrightPhase2", "True");
+            else if (_settings.LightingMode == "Future")
+                SetOrRemove("FFlagDebugForceFutureIsBrightPhase3", "True");
+
+            // PostFX & Telemetry
+            SetOrRemove("FFlagDisablePostFx", _settings.DisablePostFx ? "True" : null);
+            string tel = _settings.DisableTelemetry ? "True" : null;
+            SetOrRemove("FFlagDebugDisableTelemetryEphemeralCounter", tel);
+            SetOrRemove("FFlagDebugDisableTelemetryEphemeralStat", tel);
+            SetOrRemove("FFlagDebugDisableTelemetryEventIngest", tel);
+            SetOrRemove("FFlagDebugDisableTelemetryPoint", tel);
+            SetOrRemove("FFlagDebugDisableTelemetryV2Counter", tel);
+
+            // MTU
+            SetOrRemove("DFIntConnectionMTUSize", _settings.MtuSize > 0 ? _settings.MtuSize.ToString() : null);
+        }
+
+        public void SetOrRemove(string key, string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                Flags.Remove(key);
+            else
+                Flags[key] = value;
+        }
+
+        public bool SaveAndSync()
+        {
+            JsonHelper.SaveStringDict(NRBloxPaths.LocalClientAppSettingsFile, Flags);
+
+            string versionDir = NRBloxPaths.GetRobloxVersionDir();
+            if (!Directory.Exists(versionDir))
+                return false;
+
+            string clientSettingsDir = Path.Combine(versionDir, "ClientSettings");
+            string targetFile = Path.Combine(clientSettingsDir, "ClientAppSettings.json");
+            try
+            {
+                if (!Directory.Exists(clientSettingsDir))
+                    Directory.CreateDirectory(clientSettingsDir);
+
+                if (!_settings.UseFastFlagManager)
+                {
+                    if (File.Exists(targetFile))
+                        File.Delete(targetFile);
+                    return true;
+                }
+
+                JsonHelper.SaveStringDict(targetFile, Flags);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
+
+    public sealed class ModEngine
+    {
+        private readonly NRBloxSettings _settings;
+
+        public ModEngine(NRBloxSettings settings)
+        {
+            _settings = settings;
+        }
+
+        public int ApplyAndSyncMods()
+        {
+            NRBloxPaths.EnsureDirectories();
+            string modDir = NRBloxPaths.ModificationsDir;
+
+            // 1. Cursors (From2006 / From2013 / Default)
+            string cursorTargetDir = Path.Combine(modDir, "content", "textures", "Cursors", "KeyboardMouse");
+            string arrowDst = Path.Combine(cursorTargetDir, "ArrowCursor.png");
+            string arrowFarDst = Path.Combine(cursorTargetDir, "ArrowFarCursor.png");
+
+            if (_settings.CursorType == "From2006" || _settings.CursorType == "From2013")
+            {
+                string srcFolder = Path.Combine(NRBloxPaths.ModsAssetsDir, "cursors", _settings.CursorType);
+                CopyIfExists(Path.Combine(srcFolder, "ArrowCursor.png"), arrowDst);
+                CopyIfExists(Path.Combine(srcFolder, "ArrowFarCursor.png"), arrowFarDst);
+            }
+            else
+            {
+                DeleteIfExists(arrowDst);
+                DeleteIfExists(arrowFarDst);
+            }
+
+            // 2. Classic Character Sounds
+            string soundsTargetDir = Path.Combine(modDir, "content", "sounds");
+            string[,] soundMap = new string[,]
+            {
+                { "OldWalk.mp3", "action_footsteps_plastic.mp3" },
+                { "OldJump.mp3", "action_jump.mp3" },
+                { "OldGetUp.mp3", "action_get_up.mp3" },
+                { "Empty.mp3", "action_falling.mp3" },
+                { "Empty.mp3", "action_jump_land.mp3" },
+                { "Empty.mp3", "action_swim.mp3" },
+                { "Empty.mp3", "impact_water.mp3" }
+            };
+
+            for (int i = 0; i < soundMap.GetLength(0); i++)
+            {
+                string src = Path.Combine(NRBloxPaths.ModsAssetsDir, "sounds", soundMap[i, 0]);
+                string dst = Path.Combine(soundsTargetDir, soundMap[i, 1]);
+                if (_settings.UseOldCharacterSounds && File.Exists(src))
+                    CopyIfExists(src, dst);
+                else
+                    DeleteIfExists(dst);
+            }
+
+            // 3. Old Avatar Background
+            string mobileRbxlDst = Path.Combine(modDir, "ExtraContent", "places", "Mobile.rbxl");
+            string avatarBgSrc = Path.Combine(NRBloxPaths.ModsAssetsDir, "places", "OldAvatarBackground.rbxl");
+            if (_settings.UseOldAvatarBackground && File.Exists(avatarBgSrc))
+                CopyIfExists(avatarBgSrc, mobileRbxlDst);
+            else
+                DeleteIfExists(mobileRbxlDst);
+
+            // 4. Custom Font
+            string customFontDst = Path.Combine(modDir, "content", "fonts", "CustomFont.ttf");
+            if (!string.IsNullOrEmpty(_settings.CustomFontPath) && File.Exists(_settings.CustomFontPath))
+                CopyIfExists(_settings.CustomFontPath, customFontDst);
+            else if (string.IsNullOrEmpty(_settings.CustomFontPath))
+                DeleteIfExists(customFontDst);
+
+            return SyncModificationsToRobloxVersion();
+        }
+
+        public int SyncModificationsToRobloxVersion()
+        {
+            string versionDir = NRBloxPaths.GetRobloxVersionDir();
+            if (!Directory.Exists(versionDir))
+                return 0;
+
+            string modDir = NRBloxPaths.ModificationsDir;
+            var oldManifest = new HashSet<string>(_settings.AppliedModManifest ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+            var newManifest = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int count = 0;
+
+            foreach (string file in Directory.GetFiles(modDir, "*", SearchOption.AllDirectories))
+            {
+                string rel = file.Substring(modDir.Length).TrimStart('\\', '/');
+                newManifest.Add(rel);
+
+                string targetPath = Path.Combine(versionDir, rel);
+                string backupPath = targetPath + ".nrblox_orig";
+                try
+                {
+                    string parent = Path.GetDirectoryName(targetPath);
+                    if (!Directory.Exists(parent))
+                        Directory.CreateDirectory(parent);
+
+                    if (File.Exists(targetPath) && !File.Exists(backupPath) && !rel.StartsWith("ClientSettings", StringComparison.OrdinalIgnoreCase))
+                        File.Copy(targetPath, backupPath, false);
+
+                    File.Copy(file, targetPath, true);
+                    count++;
+                }
+                catch { }
+            }
+
+            foreach (string oldRel in oldManifest)
+            {
+                if (!newManifest.Contains(oldRel))
+                {
+                    string targetPath = Path.Combine(versionDir, oldRel);
+                    string backupPath = targetPath + ".nrblox_orig";
+                    try
+                    {
+                        if (File.Exists(backupPath))
+                        {
+                            File.Copy(backupPath, targetPath, true);
+                            File.Delete(backupPath);
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            _settings.AppliedModManifest = new List<string>(newManifest);
+            JsonHelper.Save(NRBloxPaths.SettingsFile, _settings);
+            return count;
+        }
+
+        private static void CopyIfExists(string src, string dst)
+        {
+            try
+            {
+                if (!File.Exists(src)) return;
+                string dir = Path.GetDirectoryName(dst);
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                File.Copy(src, dst, true);
+            }
+            catch { }
+        }
+
+        private static void DeleteIfExists(string path)
+        {
+            try
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+            catch { }
+        }
+    }
+}

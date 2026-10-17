@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=NRBlox (Linux Edition)
+GenericName=Roblox Linux Engine & FastFlag Controller
+Comment=Native Linux Launcher for Roblox (Sober, Vinegar & Wine64/Proton)
+Exec=nrblox-linux %u
+Icon=nrblox
+Terminal=false
+Type=Application
+Categories=Game;Utility;
+MimeType=x-scheme-handler/roblox-player;x-scheme-handler/roblox;x-scheme-handler/nrblox;
+StartupWMClass=NRBloxLinux
+Keywords=Roblox;NRBlox;Linux;Sober;Vinegar;FastFlags;Vulkan;

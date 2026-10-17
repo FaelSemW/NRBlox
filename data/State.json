@@ -1,0 +1,10 @@
+{
+  "PromptWebView2Install": true,
+  "ForceReinstall": false,
+  "SettingsWindow": {
+    "Width": 1000,
+    "Height": 580,
+    "Left": 12,
+    "Top": 70
+  }
+}

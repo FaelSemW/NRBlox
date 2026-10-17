@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# ============================================================================
+# NRBlox (Linux Native Edition) — Executable Entry Point
+# Author: FaelSemW (https://github.com/FaelSemW/NRBlox)
+# Community Discord: https://discord.gg/M8j8JnQSCx
+# ============================================================================
+
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "[NRBlox-Linux] Erro: Python 3 é necessário para executar o NRBlox Linux." >&2
+    exit 1
+fi
+
+exec python3 "${SCRIPT_DIR}/src/nrblox_linux_app.py" "$@"

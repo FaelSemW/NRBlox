@@ -1,0 +1,7 @@
+# User runtime data backups & temporary logs
+data/*.bak
+data/Logs/
+data/Downloads/
+*.nrblox_orig
+__pycache__/
+*.pyc

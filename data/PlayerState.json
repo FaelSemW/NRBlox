@@ -1,0 +1,31 @@
+{
+  "VersionGuid": "version-11f155f3450f4c8e",
+  "PackageHashes": {
+    "RobloxApp.zip": "0dd34f347f8b5c4a8c12b99154ecf1c9",
+    "content-avatar.zip": "d6728552adc0631741832b9b8fef8df3",
+    "content-configs.zip": "67226d220b3c234849b54be9f0813a1e",
+    "content-fonts.zip": "7071af81f7fad1d26ec29b7699f2d96f",
+    "content-models.zip": "b0eaea6e38883c2f552ebfc3c49a66a7",
+    "content-sky.zip": "1d0390337d1a4a58e5514be1a9481ad6",
+    "content-sounds.zip": "eb9dd4d0637fd6ae21747e6b6a281d21",
+    "shaders.zip": "edefea49e7603fe9b7aea1ee419ef57a",
+    "ssl.zip": "7aead7c29ad16cd54c0022c6bb6fbb7c",
+    "content-textures2.zip": "13bd4d729bed81aaed788e7904476fbe",
+    "content-textures3.zip": "10461fdfb35f35cca13dbe35dcf21343",
+    "content-terrain.zip": "fe7b3ecee91e83f9fade72e8b0f4d47f",
+    "content-platform-fonts.zip": "8f379ec2b22ff106b837d79f7fdbf0d8",
+    "content-platform-dictionaries.zip": "e4777783652cac408a27b7c864709d26",
+    "extracontent-places.zip": "154b9840854f37ad3fe8f78f21eeaa0f",
+    "extracontent-luapackages.zip": "227e7e36132976d53a7a2f0c7a256203",
+    "extracontent-translations.zip": "05ad996224bf0ecb21cd232070fbbd2b",
+    "extracontent-models.zip": "b0981f86f5aa4b998353be448b4b24a2",
+    "extracontent-textures.zip": "8b51abc8ab8054a9eb519b3408c7bd1d",
+    "WebView2.zip": "6ec525f840c1d9a4be0ab4f6097713db",
+    "WebView2RuntimeInstaller.zip": "33edb5a4ed7ff2d851b009472d14d59d",
+    "RobloxPlayerInstaller.exe": "4339275c67af8d0c0b42492c710e28e2"
+  },
+  "Size": 595697,
+  "ModManifest": [
+    "ClientSettings\\ClientAppSettings.json"
+  ]
+}
