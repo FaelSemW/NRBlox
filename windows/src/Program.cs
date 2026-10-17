@@ -43,6 +43,23 @@ namespace NRBlox.Windows
                     Console.WriteLine(SystemIntegrationService.VerifyClientInstallation());
                     return 0;
                 }
+                if (string.Equals(arg, "--install-player", StringComparison.OrdinalIgnoreCase))
+                {
+                    string guid = RobloxPackageInstaller.ResolveTargetVersionGuid(false, false);
+                    string vDir = System.IO.Path.Combine(NRBloxPaths.SystemRobloxRoot, "Versions", guid);
+                    Console.WriteLine("[NRBlox] Installing/Verifying Roblox Player " + guid + " to: " + vDir);
+                    RobloxPackageInstaller.InstallOrUpdateClient(
+                        guid,
+                        vDir,
+                        (ratio, status, sub) => Console.WriteLine(string.Format("[{0:P0}] {1} | {2}", ratio, status, sub)),
+                        () => false
+                    );
+                    fastFlags.ApplySettingsToFlags();
+                    fastFlags.SaveAndSync();
+                    mods.ApplyAndSyncMods();
+                    Console.WriteLine(SystemIntegrationService.VerifyClientInstallation());
+                    return 0;
+                }
                 if (string.Equals(arg, "--register-protocols", StringComparison.OrdinalIgnoreCase))
                 {
                     SystemIntegrationService.RegisterWindowsProtocols();

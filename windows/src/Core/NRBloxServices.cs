@@ -786,19 +786,31 @@ namespace NRBlox.Windows.Core
             {
                 foreach (ZipArchiveEntry entry in archive.Entries)
                 {
-                    if (string.IsNullOrEmpty(entry.Name) && entry.FullName.EndsWith("/"))
+                    string relativePath = entry.FullName.Replace('/', '\\').TrimStart('\\');
+                    if (string.IsNullOrEmpty(relativePath) || relativePath.Contains(".."))
                         continue;
 
-                    string relativePath = entry.FullName.Replace('/', '\\').TrimStart('\\');
-                    if (relativePath.Contains(".."))
+                    if (string.IsNullOrEmpty(entry.Name) || relativePath.EndsWith("\\"))
+                    {
+                        string dirPath = Path.Combine(targetFolder, relativePath.TrimEnd('\\'));
+                        if (!string.IsNullOrEmpty(dirPath) && !Directory.Exists(dirPath))
+                            Directory.CreateDirectory(dirPath);
                         continue;
+                    }
 
                     string destFile = Path.Combine(targetFolder, relativePath);
                     string destDir = Path.GetDirectoryName(destFile);
                     if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
                         Directory.CreateDirectory(destDir);
 
-                    entry.ExtractToFile(destFile, true);
+                    try
+                    {
+                        entry.ExtractToFile(destFile, true);
+                    }
+                    catch
+                    {
+                        // Ignore locked file if already running
+                    }
                 }
             }
         }
