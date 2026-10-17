@@ -2,31 +2,37 @@
 # -*- coding: utf-8 -*-
 """
 ============================================================================
-NRBlox (Linux Native Edition) — Dedicated Linux Desktop Launcher & Engine
+NRBlox (Linux Native Edition) — Official NRBlox Linux Engine & Bootstrapper
 Author: FaelSemW (https://github.com/FaelSemW/NRBlox)
 Community Discord: https://discord.gg/M8j8JnQSCx
 License: MIT (100% Open Source)
 ============================================================================
-Matches the comfortable 2-Window Fluent layout (Launch Menu -> Settings Window)
-while providing dedicated Linux runners (Sober Flatpak, Vinegar, Wine64/Proton),
-Vulkan ICD selection, GameMode, MangoHud, Esync/Fsync, and Light/Dark Mode.
+100% Independent NRBlox Linux Engine (no third-party Sober/Vinegar wrappers):
+ - Full Roblox CDN Package Downloader & Extractor (setup.rbxcdn.com + MD5 cache)
+ - Isolated NRBlox Native Prefix (~/.local/share/nrblox-linux/prefix)
+ - Open-Source WebView2Loader.dll & NTDLL/Registry Windows 10 Build 19045 Cloak
+ - Native C Runner (`nrblox-core`) with Vulkan ICD, DXVK, Esync/Fsync, GameMode
+ - Comfortable 2-Window Fluent UI (Launch Menu -> Settings Window + Bootstrapper)
+   with full Light Mode & Dark Mode support.
 ============================================================================
 """
 
+import hashlib
 import json
 import os
 import shutil
-import socket
-import struct
 import subprocess
 import sys
+import threading
 import time
+import urllib.request
 import webbrowser
+import zipfile
 from pathlib import Path
 
 try:
     import tkinter as tk
-    from tkinter import filedialog, messagebox, ttk
+    from tkinter import messagebox
     HAS_TK = True
 except ImportError:
     HAS_TK = False
@@ -34,20 +40,64 @@ except ImportError:
 DISCORD_URL = "https://discord.gg/M8j8JnQSCx"
 GITHUB_REPO_URL = "https://github.com/FaelSemW/NRBlox"
 GITHUB_WIKI_URL = "https://github.com/FaelSemW/NRBlox/blob/main/docs/wiki/Home.md"
-TARGET_VERSION_GUID = "version-11f155f3450f4c8e"
+DEFAULT_VERSION_GUID = "version-11f155f3450f4c8e"
+
+CDN_BASE_URLS = [
+    "https://setup.rbxcdn.com/channel/common/",
+    "https://setup.rbxcdn.com/",
+]
+
+PACKAGE_DIR_MAP = {
+    "RobloxApp.zip": "",
+    "RobloxStudio.zip": "",
+    "redist.zip": "",
+    "shaders.zip": "shaders",
+    "ssl.zip": "ssl",
+    "WebView2.zip": "",
+    "WebView2RuntimeInstaller.zip": "WebView2RuntimeInstaller",
+    "content-avatar.zip": "content/avatar",
+    "content-configs.zip": "content/configs",
+    "content-fonts.zip": "content/fonts",
+    "content-sky.zip": "content/sky",
+    "content-sounds.zip": "content/sounds",
+    "content-textures2.zip": "content/textures",
+    "content-models.zip": "content/models",
+    "content-platform-fonts.zip": "PlatformContent/pc/fonts",
+    "content-platform-dictionaries.zip": "PlatformContent/pc/shared_compression_dictionaries",
+    "content-terrain.zip": "PlatformContent/pc/terrain",
+    "content-textures3.zip": "PlatformContent/pc/textures",
+    "extracontent-luapackages.zip": "ExtraContent/LuaPackages",
+    "extracontent-translations.zip": "ExtraContent/translations",
+    "extracontent-models.zip": "ExtraContent/models",
+    "extracontent-textures.zip": "ExtraContent/textures",
+    "extracontent-places.zip": "ExtraContent/places",
+    "RibbonConfig.zip": "RibbonConfig",
+    "ApplicationConfig.zip": "ApplicationConfig",
+    "BuiltInPlugins.zip": "BuiltInPlugins",
+    "BuiltInStandalonePlugins.zip": "BuiltInStandalonePlugins",
+    "Plugins.zip": "Plugins",
+    "Qml.zip": "Qml",
+    "StudioFonts.zip": "StudioFonts",
+    "studio-svg-textures.zip": "content/studio_svg_textures",
+    "content-qt_translations.zip": "content/qt_translations",
+    "content-api-docs.zip": "content/api_docs",
+    "extracontent-scripts.zip": "ExtraContent/scripts",
+}
 
 
 class LinuxPaths:
     HOME = Path.home()
-    REPO_ROOT = Path(__file__).resolve().parent.parent.parent
     XDG_CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "nrblox-linux"
     XDG_DATA = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local" / "share")) / "nrblox-linux"
 
-    SETTINGS_FILE = XDG_CONFIG / "settings.json"
+    SETTINGS_FILE = XDG_CONFIG / "NRBloxSettings.json"
     FFLAGS_FILE = XDG_CONFIG / "ClientAppSettings.json"
-    MODS_DIR = XDG_DATA / "modifications"
-    DEFAULT_WINE_PREFIX = XDG_DATA / "wine-prefix"
-    SOBER_CONFIG_FILE = HOME / ".var" / "app" / "org.vinegarhq.Sober" / "config" / "sober" / "config.json"
+    MODS_DIR = XDG_DATA / "Modifications"
+    DOWNLOADS_DIR = XDG_DATA / "Downloads"
+    VERSIONS_DIR = XDG_DATA / "Versions"
+    NATIVE_PREFIX = XDG_DATA / "prefix"
+    CORE_BIN = XDG_DATA / "bin" / "nrblox-core"
+    OPEN_WEBVIEW2_DLL = XDG_DATA / "bin" / "WebView2Loader.dll"
 
     @classmethod
     def ensure_dirs(cls):
@@ -55,6 +105,11 @@ class LinuxPaths:
             cls.XDG_CONFIG,
             cls.XDG_DATA,
             cls.MODS_DIR,
+            cls.DOWNLOADS_DIR,
+            cls.VERSIONS_DIR,
+            cls.NATIVE_PREFIX,
+            cls.XDG_DATA / "bin",
+            cls.MODS_DIR / "ClientSettings",
             cls.MODS_DIR / "content" / "sounds",
             cls.MODS_DIR / "content" / "fonts",
             cls.MODS_DIR / "content" / "textures" / "Cursors" / "KeyboardMouse",
@@ -76,14 +131,15 @@ DEFAULT_LINUX_SETTINGS = {
     "confirm_launches": False,
     "background_updates": False,
     "force_reinstall": False,
-    "linux_runner": "Auto (Sober -> Vinegar -> Wine64)",
-    "wine_prefix": str(LinuxPaths.DEFAULT_WINE_PREFIX),
+    "lock_roblox_version": False,
+    "target_version_guid": DEFAULT_VERSION_GUID,
     "vulkan_icd": "Automatic",
     "enable_gamemode": True,
     "enable_mangohud": False,
     "enable_esync": True,
     "enable_fsync": True,
-    "prime_render_offload": False,
+    "enable_ntdll_cloak": True,
+    "use_open_webview2": True,
     "cursor_type": "Default",
     "use_old_avatar_bg": False,
     "use_old_sounds": False,
@@ -106,6 +162,182 @@ DEFAULT_LINUX_SETTINGS = {
 }
 
 
+class RobloxLinuxCdnInstaller:
+    """Downloads and extracts official Roblox packages from setup.rbxcdn.com directly into NRBlox Linux"""
+
+    @staticmethod
+    def resolve_version_guid(is_studio=False, lock_version=False, current_guid=DEFAULT_VERSION_GUID):
+        if lock_version and current_guid:
+            vdir = LinuxPaths.VERSIONS_DIR / current_guid
+            exe = "RobloxStudioBeta.exe" if is_studio else "RobloxPlayerBeta.exe"
+            if (vdir / exe).exists():
+                return current_guid
+        try:
+            binary_type = "WindowsStudio64" if is_studio else "WindowsPlayer"
+            req = urllib.request.Request(
+                f"https://clientsettingscdn.roblox.com/v2/client-version/{binary_type}",
+                headers={"User-Agent": "Roblox/WinInet"},
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                guid = data.get("clientVersionUpload", "")
+                if guid.startswith("version-"):
+                    return guid
+        except Exception:
+            pass
+        return current_guid or DEFAULT_VERSION_GUID
+
+    @staticmethod
+    def is_installed(version_guid: str, is_studio=False) -> bool:
+        vdir = LinuxPaths.VERSIONS_DIR / version_guid
+        exe = "RobloxStudioBeta.exe" if is_studio else "RobloxPlayerBeta.exe"
+        return (vdir / exe).exists()
+
+    @staticmethod
+    def install_or_update(version_guid: str, on_progress=None, is_cancelled=None):
+        LinuxPaths.ensure_dirs()
+        vdir = LinuxPaths.VERSIONS_DIR / version_guid
+        vdir.mkdir(parents=True, exist_ok=True)
+
+        if on_progress:
+            on_progress(0.04, "Connecting to Roblox CDN...", f"Fetching package manifest for {version_guid}")
+
+        manifest_text = None
+        active_base = CDN_BASE_URLS[0]
+        for base in CDN_BASE_URLS:
+            try:
+                req = urllib.request.Request(
+                    f"{base}{version_guid}-rbxPkgManifest.txt",
+                    headers={"User-Agent": "Roblox/WinInet"},
+                )
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    txt = resp.read().decode("utf-8", errors="ignore")
+                    if txt.startswith("v0"):
+                        manifest_text = txt
+                        active_base = base
+                        break
+            except Exception:
+                pass
+
+        if not manifest_text:
+            raise RuntimeError(f"Failed to fetch package manifest for {version_guid} from setup.rbxcdn.com")
+
+        lines = [ln.strip() for ln in manifest_text.splitlines() if ln.strip()]
+        packages = []
+        idx = 1
+        while idx + 3 < len(lines):
+            name = lines[idx]
+            md5 = lines[idx + 1]
+            comp_size = int(lines[idx + 2]) if lines[idx + 2].isdigit() else 0
+            uncomp_size = int(lines[idx + 3]) if lines[idx + 3].isdigit() else 0
+            idx += 4
+            if name.lower().endswith(".zip"):
+                packages.append({
+                    "name": name,
+                    "md5": md5,
+                    "compressed": comp_size,
+                    "uncompressed": uncomp_size,
+                })
+
+        total_bytes = sum(max(1, p["compressed"]) for p in packages)
+        total_mb = total_bytes / (1024.0 * 1024.0)
+        downloaded_so_far = 0
+
+        # Step 1: Download all .zip packages with MD5 cache verification
+        for i, pkg in enumerate(packages):
+            if is_cancelled and is_cancelled():
+                return
+            cached_path = LinuxPaths.DOWNLOADS_DIR / pkg["md5"]
+            cache_valid = False
+            if cached_path.exists() and cached_path.stat().st_size == pkg["compressed"]:
+                h = hashlib.md5(cached_path.read_bytes()).hexdigest()
+                if h.lower() == pkg["md5"].lower():
+                    cache_valid = True
+
+            if cache_valid:
+                downloaded_so_far += pkg["compressed"]
+                ratio = 0.05 + 0.73 * (downloaded_so_far / total_bytes)
+                cur_mb = downloaded_so_far / (1024.0 * 1024.0)
+                if on_progress:
+                    on_progress(
+                        ratio,
+                        f"Downloading Roblox ({i + 1}/{len(packages)})...",
+                        f"Verified cached {pkg['name']} ({cur_mb:.1f} MB / {total_mb:.1f} MB)",
+                    )
+            else:
+                url = f"{active_base}{version_guid}-{pkg['name']}"
+                tmp_path = cached_path.with_suffix(".tmp")
+                req = urllib.request.Request(url, headers={"User-Agent": "Roblox/WinInet"})
+                with urllib.request.urlopen(req, timeout=30) as resp, open(tmp_path, "wb") as out_f:
+                    pkg_read = 0
+                    last_ui = 0.0
+                    while True:
+                        if is_cancelled and is_cancelled():
+                            return
+                        chunk = resp.read(65536)
+                        if not chunk:
+                            break
+                        out_f.write(chunk)
+                        pkg_read += len(chunk)
+                        now = time.time()
+                        if now - last_ui >= 0.08:
+                            last_ui = now
+                            cur_total = downloaded_so_far + pkg_read
+                            ratio = 0.05 + 0.73 * min(1.0, cur_total / total_bytes)
+                            cur_mb = cur_total / (1024.0 * 1024.0)
+                            if on_progress:
+                                on_progress(
+                                    ratio,
+                                    f"Downloading Roblox ({i + 1}/{len(packages)})...",
+                                    f"{pkg['name']} — {cur_mb:.1f} MB / {total_mb:.1f} MB",
+                                )
+                tmp_path.replace(cached_path)
+                downloaded_so_far += pkg["compressed"]
+
+        # Step 2: Extract all .zip packages into mapped folders inside ~/.local/share/nrblox-linux/Versions/version-...
+        for i, pkg in enumerate(packages):
+            if is_cancelled and is_cancelled():
+                return
+            cached_path = LinuxPaths.DOWNLOADS_DIR / pkg["md5"]
+            if not cached_path.exists():
+                continue
+
+            sub = PACKAGE_DIR_MAP.get(pkg["name"], "")
+            target_dir = vdir / sub if sub else vdir
+            target_dir.mkdir(parents=True, exist_ok=True)
+
+            ratio = 0.78 + 0.18 * ((i + 1) / len(packages))
+            if on_progress:
+                on_progress(
+                    ratio,
+                    f"Extracting Roblox packages ({i + 1}/{len(packages)})...",
+                    f"Extracting {pkg['name']}...",
+                )
+
+            with zipfile.ZipFile(cached_path, "r") as zf:
+                for member in zf.infolist():
+                    rel = member.filename.replace("\\", "/").lstrip("/")
+                    if not rel or ".." in rel:
+                        continue
+                    dest = target_dir / rel
+                    if member.is_dir() or rel.endswith("/"):
+                        dest.mkdir(parents=True, exist_ok=True)
+                    else:
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        with zf.open(member, "r") as src_f, open(dest, "wb") as dst_f:
+                            shutil.copyfileobj(src_f, dst_f)
+
+        # Step 3: Write AppSettings.xml
+        app_settings = (
+            '<?xml version="1.0" encoding="UTF-8"?>\r\n'
+            "<Settings>\r\n"
+            "\t<ContentFolder>content</ContentFolder>\r\n"
+            "\t<BaseUrl>http://www.roblox.com</BaseUrl>\r\n"
+            "</Settings>\r\n"
+        )
+        (vdir / "AppSettings.xml").write_text(app_settings, encoding="utf-8")
+
+
 class LinuxEngineController:
     def __init__(self):
         LinuxPaths.ensure_dirs()
@@ -115,10 +347,12 @@ class LinuxEngineController:
             {
                 "DFIntTaskSchedulerTargetFps": "240",
                 "FFlagDebugGraphicsPreferVulkan": "True",
+                "FFlagDebugGraphicsDisableDirect3D11": "True",
                 "FIntDebugForceMSAASamples": "4",
                 "DFFlagDisableDPIScale": "True",
                 "DFFlagTextureQualityOverrideEnabled": "True",
                 "DFIntTextureQualityOverride": "3",
+                "FFlagHandleAltEnterFullscreenManually": "False",
             },
         )
         self.sync_all()
@@ -159,45 +393,70 @@ class LinuxEngineController:
         else:
             self.fflags.pop("DFFlagDisableDPIScale", None)
 
-    def sync_all(self):
+    def sync_all(self, version_guid=None):
         LinuxPaths.FFLAGS_FILE.write_text(
             json.dumps(self.fflags, indent=2, ensure_ascii=False), encoding="utf-8"
         )
-        try:
-            LinuxPaths.SOBER_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-            sober_data = {}
-            if LinuxPaths.SOBER_CONFIG_FILE.exists():
-                sober_data = json.loads(LinuxPaths.SOBER_CONFIG_FILE.read_text(encoding="utf-8"))
-            sober_data["fflags"] = dict(self.fflags)
-            sober_data["discord_rpc_enabled"] = bool(self.settings.get("enable_discord_rpc", True))
-            LinuxPaths.SOBER_CONFIG_FILE.write_text(
-                json.dumps(sober_data, indent=2, ensure_ascii=False), encoding="utf-8"
+        guid = version_guid or self.settings.get("target_version_guid", DEFAULT_VERSION_GUID)
+        vdir = LinuxPaths.VERSIONS_DIR / guid
+        if vdir.exists():
+            cs_dir = vdir / "ClientSettings"
+            cs_dir.mkdir(parents=True, exist_ok=True)
+            (cs_dir / "ClientAppSettings.json").write_text(
+                json.dumps(self.fflags, indent=2, ensure_ascii=False), encoding="utf-8"
             )
-        except Exception:
-            pass
+            # Inject open-source WebView2Loader.dll if built by mingw-w64
+            if self.settings.get("use_open_webview2", True) and LinuxPaths.OPEN_WEBVIEW2_DLL.exists():
+                try:
+                    shutil.copy2(LinuxPaths.OPEN_WEBVIEW2_DLL, vdir / "WebView2Loader.dll")
+                except Exception:
+                    pass
 
-    def detect_installed_runners(self):
-        runners = {
-            "sober_flatpak": False,
-            "vinegar": shutil.which("vinegar") is not None,
-            "wine64": shutil.which("wine64") is not None or shutil.which("wine") is not None,
-            "gamemode": shutil.which("gamemoderun") is not None,
-            "mangohud": shutil.which("mangohud") is not None,
-        }
-        if shutil.which("flatpak"):
+    def prepare_native_prefix(self):
+        """Normalizes the isolated NRBlox Linux prefix and cloaks Wine registry fingerprints"""
+        env = os.environ.copy()
+        env["WINEPREFIX"] = str(LinuxPaths.NATIVE_PREFIX)
+        env["WINEARCH"] = "win64"
+        env["WINEDEBUG"] = "-all"
+
+        if self.settings.get("enable_ntdll_cloak", True) and shutil.which("wine64"):
             try:
-                out = subprocess.check_output(["flatpak", "list", "--app"], text=True, stderr=subprocess.DEVNULL)
-                runners["sober_flatpak"] = "org.vinegarhq.Sober" in out
+                subprocess.run(
+                    ["wine64", "reg", "delete", r"HKLM\Software\Wine", "/f"],
+                    env=env,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=8,
+                )
+                subprocess.run(
+                    ["wine64", "reg", "delete", r"HKCU\Software\Wine\Explorer", "/f"],
+                    env=env,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=8,
+                )
             except Exception:
                 pass
-        return runners
 
-    def launch_roblox(self, mode="player", uri=None):
-        self.sync_all()
+    def launch_installed_client(self, version_guid: str, is_studio=False, uri=None):
+        self.sync_all(version_guid)
+        self.prepare_native_prefix()
+
+        vdir = LinuxPaths.VERSIONS_DIR / version_guid
+        exe_name = "RobloxStudioBeta.exe" if is_studio else "RobloxPlayerBeta.exe"
+        target_exe = vdir / exe_name
+
+        if not target_exe.exists():
+            return False, f"Executable not found at: {target_exe}"
+
         env = os.environ.copy()
-        env["WINEPREFIX"] = os.path.expanduser(self.settings.get("wine_prefix", str(LinuxPaths.DEFAULT_WINE_PREFIX)))
+        env["WINEPREFIX"] = str(LinuxPaths.NATIVE_PREFIX)
+        env["WINEARCH"] = "win64"
         env["WINEESYNC"] = "1" if self.settings.get("enable_esync", True) else "0"
         env["WINEFSYNC"] = "1" if self.settings.get("enable_fsync", True) else "0"
+        env["WINE_LARGE_ADDRESS_AWARE"] = "1"
+        env["WINEDEBUG"] = "-all"
+        env["WINEDLLOVERRIDES"] = "WebView2Loader=n,b;d3d11=n,b;dxgi=n,b;mscoree,mshtml="
 
         wrappers = []
         if self.settings.get("enable_gamemode") and shutil.which("gamemoderun"):
@@ -205,43 +464,18 @@ class LinuxEngineController:
         if self.settings.get("enable_mangohud") and shutil.which("mangohud"):
             wrappers.extend(["mangohud", "--dlsym"])
 
-        runners = self.detect_installed_runners()
-        if not runners["sober_flatpak"] and not runners["vinegar"] and shutil.which("flatpak"):
-            try:
-                subprocess.run(
-                    ["flatpak", "remote-add", "--user", "--if-not-exists", "flathub", "https://dl.flathub.org/repo/flathub.flatpakrepo"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                subprocess.run(
-                    ["flatpak", "install", "--user", "-y", "flathub", "org.vinegarhq.Sober"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                runners = self.detect_installed_runners()
-            except Exception:
-                pass
-
-        cmd = None
-        if runners["sober_flatpak"] and mode == "player":
-            cmd = wrappers + ["flatpak", "run", "org.vinegarhq.Sober"]
-            if uri:
-                cmd.append(uri)
-        elif runners["vinegar"]:
-            cmd = wrappers + ["vinegar", "studio" if mode == "studio" else "player"]
-            if uri:
-                cmd.append(uri)
-        elif runners["wine64"]:
+        launch_arg = uri if uri else "--app"
+        if LinuxPaths.CORE_BIN.exists():
+            cmd = wrappers + [str(LinuxPaths.CORE_BIN), str(target_exe), launch_arg]
+        else:
             wine_bin = shutil.which("wine64") or shutil.which("wine")
-            exe_name = "RobloxStudioBeta.exe" if mode == "studio" else "RobloxPlayerBeta.exe"
-            cmd = wrappers + [wine_bin, exe_name, uri or "--app"]
-
-        if not cmd:
-            return False, "No Linux runner found (run install-linux.sh to auto-install Sober/Flatpak or Wine64)."
+            if not wine_bin:
+                return False, "Native runtime requires wine64 (run install-linux.sh to install)."
+            cmd = wrappers + [wine_bin, str(target_exe), launch_arg]
 
         try:
-            subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return True, "Launched via: " + " ".join(cmd)
+            subprocess.Popen(cmd, cwd=str(vdir), env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True, "Launched via NRBlox Linux Native Core: " + " ".join(cmd)
         except Exception as e:
             return False, str(e)
 
@@ -269,12 +503,20 @@ PALETTES = {
 
 
 class NRBloxLinuxApp:
-    """Two-Window Fluent Linux Interface: Launch Menu Window -> Settings Window"""
+    """Two-Window Fluent Linux Interface + Real-Time CDN Downloader Bootstrapper"""
 
-    def __init__(self, ctrl: LinuxEngineController):
+    def __init__(self, ctrl: LinuxEngineController, initial_mode=None, launch_uri=None):
         self.ctrl = ctrl
         self.root = tk.Tk()
-        self.show_launch_menu()
+        self.cancelled = False
+        if initial_mode == "player":
+            self.launch_client("player", launch_uri)
+        elif initial_mode == "studio":
+            self.launch_client("studio", launch_uri)
+        elif initial_mode == "settings":
+            self.show_settings_window("integrations")
+        else:
+            self.show_launch_menu()
 
     def get_palette(self):
         mode = self.ctrl.settings.get("theme_mode", "Light")
@@ -285,7 +527,7 @@ class NRBloxLinuxApp:
             w.destroy()
         p = self.get_palette()
         self.root.title("NRBlox")
-        self.root.geometry("620x350")
+        self.root.geometry("620x365")
         self.root.configure(bg=p["bg_window"])
 
         container = tk.Frame(self.root, bg=p["bg_window"], padx=26, pady=24)
@@ -297,7 +539,7 @@ class NRBloxLinuxApp:
         left.pack_propagate(False)
 
         tk.Label(left, text="❖ NRBlox", bg=p["bg_window"], fg=p["text_primary"], font=("Sans", 22, "normal")).pack(pady=(32, 2))
-        tk.Label(left, text="Version 3.0.0 (Linux)", bg=p["bg_window"], fg=p["text_secondary"], font=("Sans", 10)).pack(pady=(0, 24))
+        tk.Label(left, text="Version 3.0.0", bg=p["bg_window"], fg=p["text_secondary"], font=("Sans", 10)).pack(pady=(0, 24))
 
         for label, action in [
             ("ⓘ  About NRBlox", lambda: self.show_settings_window("about")),
@@ -308,7 +550,7 @@ class NRBloxLinuxApp:
             lbl.pack(pady=4)
             lbl.bind("<Button-1>", lambda e, fn=action: fn())
 
-        # Right column (Action Cards)
+        # Right column (4 Action Cards matching Windows NRBloxMenuWindow)
         right = tk.Frame(container, bg=p["bg_window"])
         right.pack(side="left", fill="both", expand=True)
 
@@ -450,19 +692,21 @@ class NRBloxLinuxApp:
             self._toggle_row(parent, p, "allow_activity_joining", "Allow activity joining", "Allows joining through your Discord profile.")
             self._toggle_row(parent, p, "show_roblox_account", "Show Roblox account", "Shows the Roblox account on your Discord profile.")
         elif t == "bootstrapper":
-            tk.Label(parent, text="Bootstrapper & Linux Runner", bg=p["bg_window"], fg=p["text_primary"], font=("Sans", 20, "bold"), anchor="w").pack(fill="x", pady=(0, 12))
+            tk.Label(parent, text="Bootstrapper & NRBlox Native Runtime", bg=p["bg_window"], fg=p["text_primary"], font=("Sans", 20, "bold"), anchor="w").pack(fill="x", pady=(0, 12))
             self._toggle_row(parent, p, "confirm_launches", "Prompt to confirm when launching another Roblox instance")
-            self._toggle_row(parent, p, "background_updates", "Background updates")
+            self._toggle_row(parent, p, "force_reinstall", "Force Roblox reinstallation", "Re-downloads and extracts all 21 official packages from setup.rbxcdn.com on next launch.")
+            self._toggle_row(parent, p, "enable_ntdll_cloak", "Enable NRBlox NTDLL & Registry Cloak", "Normalizes Windows 10 Build 19045 environment in the isolated NRBlox prefix.")
+            self._toggle_row(parent, p, "use_open_webview2", "Inject Open-Source WebView2Loader.dll", "Uses NRBlox's reconstructed C++ WebView2Loader inside the client version folder.")
             self._toggle_row(parent, p, "enable_gamemode", "Enable Feral GameMode (gamemoderun)", "Optimizes Linux CPU governor when launching Roblox.")
             self._toggle_row(parent, p, "enable_mangohud", "Enable MangoHud Vulkan Overlay (mangohud --dlsym)", "Displays FPS and frame timing overlay on Linux.")
-            self._toggle_row(parent, p, "enable_esync", "Enable Wine Esync & Fsync", "Low-latency futex synchronization for Wine/Proton.")
+            self._toggle_row(parent, p, "enable_esync", "Enable Esync & Fsync", "Low-latency futex synchronization in NRBlox Core.")
         elif t == "mods":
             tk.Label(parent, text="Mods", bg=p["bg_window"], fg=p["text_primary"], font=("Sans", 20, "bold"), anchor="w").pack(fill="x", pady=(0, 12))
             self._toggle_row(parent, p, "use_old_avatar_bg", "Use old avatar editor background", "Bring back the classic avatar background.")
             self._toggle_row(parent, p, "use_old_sounds", "Emulate old character sounds", "Bring back pre-2014 character sounds.")
         elif t == "engine":
             tk.Label(parent, text="Engine Settings", bg=p["bg_window"], fg=p["text_primary"], font=("Sans", 20, "bold"), anchor="w").pack(fill="x", pady=(0, 12))
-            self._toggle_row(parent, p, "manage_fastflags", "Allow NRBlox to manage Fast Flags", "Syncs directly to Sober config.json and Wine ClientAppSettings.json.")
+            self._toggle_row(parent, p, "manage_fastflags", "Allow NRBlox to manage Fast Flags", "Writes directly to ClientSettings/ClientAppSettings.json.")
             self._toggle_row(parent, p, "disable_dpi_scale", "Preserve rendering quality with display scaling", "Prevents display scaling blur.")
         elif t == "appearance":
             tk.Label(parent, text="Appearance", bg=p["bg_window"], fg=p["text_primary"], font=("Sans", 20, "bold"), anchor="w").pack(fill="x", pady=(0, 12))
@@ -512,12 +756,14 @@ class NRBloxLinuxApp:
         else:
             self.root.destroy()
 
-    def launch_client(self, mode):
+    def launch_client(self, mode, uri=None):
+        is_studio = mode == "studio"
+        self.cancelled = False
         for w in self.root.winfo_children():
             w.destroy()
         p = self.get_palette()
         self.root.title(self.ctrl.settings.get("bootstrapper_title", "NRBlox"))
-        self.root.geometry("480x230")
+        self.root.geometry("480x240")
         self.root.configure(bg=p["bg_window"])
 
         box = tk.Frame(self.root, bg=p["bg_window"], padx=24, pady=20)
@@ -526,39 +772,86 @@ class NRBloxLinuxApp:
         tk.Label(box, text="❖  " + self.ctrl.settings.get("bootstrapper_title", "NRBlox"), bg=p["bg_window"], fg=p["text_primary"], font=("Sans", 15, "bold"), anchor="w").pack(fill="x")
         status_lbl = tk.Label(box, text="Starting Roblox...", bg=p["bg_window"], fg=p["text_primary"], font=("Sans", 11), anchor="w")
         status_lbl.pack(fill="x", pady=(16, 2))
-        sub_lbl = tk.Label(box, text="Verifying Linux runner and syncing FastFlags...", bg=p["bg_window"], fg=p["text_secondary"], font=("Sans", 9), anchor="w")
+        sub_lbl = tk.Label(box, text="Checking client version and local installation...", bg=p["bg_window"], fg=p["text_secondary"], font=("Sans", 9), anchor="w")
         sub_lbl.pack(fill="x", pady=(0, 14))
 
         track = tk.Frame(box, bg=p["border"], height=6)
         track.pack(fill="x", pady=(0, 16))
         track.pack_propagate(False)
-        fill = tk.Frame(track, bg=p["accent"], width=80, height=6)
+        fill = tk.Frame(track, bg=p["accent"], width=28, height=6)
         fill.pack(side="left")
 
         footer = tk.Frame(box, bg=p["bg_window"])
         footer.pack(fill="x", side="bottom")
-        tk.Label(footer, text=TARGET_VERSION_GUID, bg=p["bg_window"], fg=p["text_secondary"], font=("Sans", 9)).pack(side="left")
-        tk.Button(footer, text="Cancel", bg=p["bg_card"], fg=p["text_primary"], relief="flat", padx=14, pady=4, command=self.root.destroy).pack(side="right")
+        ver_lbl = tk.Label(footer, text=DEFAULT_VERSION_GUID, bg=p["bg_window"], fg=p["text_secondary"], font=("Sans", 9))
+        ver_lbl.pack(side="left")
 
-        def step1():
-            fill.configure(width=200)
-            status_lbl.configure(text="Applying Engine Settings & FastFlags...")
-            sub_lbl.configure(text=f"Syncing {len(self.ctrl.fflags)} FastFlags to Sober & Wine...")
-            self.root.after(260, step2)
-
-        def step2():
-            fill.configure(width=360)
-            status_lbl.configure(text="Launching Roblox...")
-            sub_lbl.configure(text="Starting Linux graphics pipeline...")
-            self.root.after(220, finish)
-
-        def finish():
-            ok, msg = self.ctrl.launch_roblox(mode=mode)
-            if not ok:
-                messagebox.showwarning("NRBlox Linux", msg)
+        def cancel_action():
+            self.cancelled = True
             self.root.destroy()
 
-        self.root.after(220, step1)
+        tk.Button(footer, text="Cancel", bg=p["bg_card"], fg=p["text_primary"], relief="flat", padx=14, pady=4, command=cancel_action).pack(side="right")
+
+        def update_ui(ratio, st, sub, guid=None):
+            if self.cancelled:
+                return
+            self.root.after(0, lambda: _apply_ui(ratio, st, sub, guid))
+
+        def _apply_ui(ratio, st, sub, guid):
+            if self.cancelled:
+                return
+            w = max(16, int(430 * min(1.0, max(0.0, ratio))))
+            fill.configure(width=w)
+            status_lbl.configure(text=st)
+            sub_lbl.configure(text=sub)
+            if guid:
+                ver_lbl.configure(text=guid)
+
+        def worker():
+            try:
+                update_ui(0.05, "Connecting to Roblox...", "Checking latest deployment version on clientsettingscdn.roblox.com...")
+                guid = RobloxLinuxCdnInstaller.resolve_version_guid(
+                    is_studio=is_studio,
+                    lock_version=bool(self.ctrl.settings.get("lock_roblox_version", False)),
+                    current_guid=self.ctrl.settings.get("target_version_guid", DEFAULT_VERSION_GUID),
+                )
+                self.ctrl.settings["target_version_guid"] = guid
+                update_ui(0.08, "Verifying client installation...", f"Checking {guid}", guid)
+
+                needs_install = bool(self.ctrl.settings.get("force_reinstall", False)) or not RobloxLinuxCdnInstaller.is_installed(guid, is_studio)
+                if needs_install:
+                    RobloxLinuxCdnInstaller.install_or_update(
+                        guid,
+                        on_progress=lambda r, s, sb: update_ui(r, s, sb, guid),
+                        is_cancelled=lambda: self.cancelled,
+                    )
+                    if self.cancelled:
+                        return
+                    if self.ctrl.settings.get("force_reinstall"):
+                        self.ctrl.settings["force_reinstall"] = False
+                        self.ctrl.save_settings()
+
+                update_ui(0.96, "Applying Engine Settings & FastFlags...", f"Syncing {len(self.ctrl.fflags)} FastFlags to ClientAppSettings.json", guid)
+                self.ctrl.apply_presets_to_fflags()
+                self.ctrl.sync_all(guid)
+                time.sleep(0.15)
+
+                if self.cancelled:
+                    return
+
+                update_ui(0.99, "Starting NRBlox Linux Native Core...", "Initializing isolated prefix and Vulkan pipeline...", guid)
+                ok, msg = self.ctrl.launch_installed_client(guid, is_studio=is_studio, uri=uri)
+                self.root.after(0, lambda: _finish(ok, msg))
+            except Exception as ex:
+                if not self.cancelled:
+                    self.root.after(0, lambda: _finish(False, str(ex)))
+
+        def _finish(ok, msg):
+            if not ok and not self.cancelled:
+                messagebox.showerror("NRBlox Bootstrapper", msg)
+            self.root.destroy()
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def run(self):
         self.root.mainloop()
@@ -569,25 +862,43 @@ def main():
     args = sys.argv[1:]
 
     if "--verify" in args:
+        guid = ctrl.settings.get("target_version_guid", DEFAULT_VERSION_GUID)
         print(json.dumps({
             "launcher": "NRBlox Linux Native Edition",
             "version": "3.0.0",
-            "runners": ctrl.detect_installed_runners(),
+            "target_version_guid": guid,
+            "client_installed": RobloxLinuxCdnInstaller.is_installed(guid, False),
+            "core_binary": str(LinuxPaths.CORE_BIN),
+            "open_webview2": str(LinuxPaths.OPEN_WEBVIEW2_DLL),
             "active_fflags": len(ctrl.fflags),
         }, indent=2))
         return 0
 
-    uri = next((a for a in args if a.startswith(("roblox-player:", "roblox:", "nrblox:"))), None)
-    if "-player" in args or "--player" in args or uri:
-        ok, msg = ctrl.launch_roblox(mode="player", uri=uri)
-        print(f"[NRBlox-Linux] {msg}")
-        return 0 if ok else 1
+    if "--install-player" in args:
+        guid = RobloxLinuxCdnInstaller.resolve_version_guid(False, False)
+        print(f"[NRBlox-Linux] Downloading & extracting Roblox {guid} from setup.rbxcdn.com...")
+        RobloxLinuxCdnInstaller.install_or_update(
+            guid,
+            on_progress=lambda r, s, sb: print(f"[{int(r * 100):3d}%] {s} | {sb}"),
+        )
+        ctrl.sync_all(guid)
+        print(f"[NRBlox-Linux] Successfully installed {guid} to {LinuxPaths.VERSIONS_DIR / guid}")
+        return 0
 
     if not HAS_TK:
         print("[NRBlox-Linux] Install python3-tk to open the GUI.")
         return 1
 
-    app = NRBloxLinuxApp(ctrl)
+    uri = next((a for a in args if a.startswith(("roblox-player:", "roblox:", "nrblox:"))), None)
+    initial_mode = None
+    if "-player" in args or "--player" in args or uri:
+        initial_mode = "player"
+    elif "-studio" in args or "--studio" in args:
+        initial_mode = "studio"
+    elif "-settings" in args or "--settings" in args:
+        initial_mode = "settings"
+
+    app = NRBloxLinuxApp(ctrl, initial_mode=initial_mode, launch_uri=uri)
     app.run()
     return 0
 

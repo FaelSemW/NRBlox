@@ -19,12 +19,14 @@ Construído inteiramente em **C# com Windows Presentation Foundation (`Presentat
 
 ---
 
-## 🐧 2. Arquitetura do Launcher Linux (`linux/`)
-Desenvolvido especificamente para o ecossistema Linux (**X11 / Wayland**):
+## 🐧 2. Arquitetura do Launcher & Runtime Linux (`linux/`)
+Desenvolvido especificamente para o ecossistema Linux (**X11 / Wayland**) sem depender de wrappers de terceiros:
+- **`linux/runtime/nrblox_linux_core.c`**: Binário nativo em C (`nrblox-core`) que isola o prefixo `~/.local/share/nrblox-linux/prefix`, configura `WINEESYNC=1`, `WINEFSYNC=1`, `Vulkan / DXVK` e despacha `RobloxPlayerBeta.exe` diretamente da pasta da versão.
+- **`linux/runtime/nrblox_wine_cloak.cpp`**: Implementação open-source em C++ do `WebView2Loader.dll` combinada com normalização de variáveis de ambiente e registro Windows 10 Build 19045.
 - **`linux/src/nrblox_linux_app.py`**:
-  - `LinuxEngineController`: Orquestra a execução através do **Sober (`org.vinegarhq.Sober`)**, **Vinegar** ou **Wine64 / Proton**, configurando variáveis de ambiente de baixo nível (`VK_ICD_FILENAMES`, `WINEESYNC`, `WINEFSYNC`, `__NV_PRIME_RENDER_OFFLOAD`) e wrappers (`gamemoderun`, `mangohud`, `gamescope`).
-  - `LinuxDiscordRpc`: Cliente IPC via socket Unix (`AF_UNIX`) compatível com Discord nativo, Flatpak e Vesktop.
-  - `NRBloxLinuxDesktopUI`: Interface gráfica nativa para Linux com alternância instantânea entre **Dark Mode** e **Light Mode**.
+  - `RobloxLinuxCdnInstaller`: Baixa e extrai os 21 pacotes `.zip` oficiais direto de `setup.rbxcdn.com` com verificação de cache MD5.
+  - `LinuxEngineController`: Sincroniza `ClientAppSettings.json`, aplica o NTDLL/Registry Cloak e coordena `gamemoderun` e `mangohud`.
+  - `NRBloxLinuxApp`: Interface Fluent de 2 janelas (**Launch Menu** + **Settings Window**) e janela de **Bootstrapper** com barra de progresso em MB em tempo real, com suporte a **Light Mode** e **Dark Mode**.
 
 ---
 

@@ -7,7 +7,7 @@ O **NRBlox** conta com um motor integrado de telemetria de sessão em tempo real
 ---
 
 ## 🌍 1. Geolocalização de Servidores UDMUX
-Ao entrar em uma experiência, o NRBlox lê em tempo real o arquivo de log ativo do cliente (`%LocalAppData%\Roblox\logs` no Windows ou `~/.var/app/org.vinegarhq.Sober/data/sober/logs` no Linux) e extrai:
+Ao entrar em uma experiência, o NRBlox lê em tempo real o arquivo de log ativo do cliente (`%LocalAppData%\Roblox\logs` no Windows ou `~/.local/share/nrblox-linux/prefix/drive_c/users/$USER/AppData/Local/Roblox/logs` no Linux) e extrai:
 - **`PlaceId`** (ID do jogo)
 - **`JobId`** (UUID da instância do servidor)
 - **`Server IP` & `Port`** (Endereço UDMUX da instância)

@@ -4,14 +4,14 @@
   <a href="https://github.com/FaelSemW/NRBlox/releases/download/v3.0.0/NRBlox.exe"><img src="https://img.shields.io/badge/Download-NRBlox.exe%20(v3.0.0)-2EA44F?style=for-the-badge&logo=windows&logoColor=white" alt="Download NRBlox.exe"></a>
   <a href="https://discord.gg/M8j8JnQSCx"><img src="https://img.shields.io/badge/Discord-Comunidade%20Oficial-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord Oficial"></a>
   <a href="https://github.com/FaelSemW/NRBlox/blob/main/docs/wiki/Home.md"><img src="https://img.shields.io/badge/GitHub%20Wiki-Documenta%C3%A7%C3%A3o%20Completa-00E5FF?style=for-the-badge&logo=github&logoColor=black" alt="Wiki Oficial"></a>
-  <img src="https://img.shields.io/badge/Linux-Sober%20%7C%20Vinegar%20%7C%20Wine64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux Engine">
+  <img src="https://img.shields.io/badge/Linux-NRBlox%20Native%20Core%20(C%2FC%2B%2B)-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux Engine">
   <img src="https://img.shields.io/badge/Licen%C3%A7a-MIT%20(100%25%20Open%20Source)-10B981?style=for-the-badge" alt="MIT License">
 </p>
 
 O **NRBlox** é uma plataforma 100% open-source de inicialização, gerenciamento de **FastFlags**, aplicação de **Mods** e monitoramento de servidores em tempo real para o Roblox, composta por **dois launchers nativos independentes e projetados especificamente para cada sistema operacional**:
 
 - 🪟 **NRBlox Windows Edition (`NRBlox.exe` em [`windows/`](./windows))**: Aplicativo Desktop **100% nativo em C# / WPF** (sem abas de navegador ou Electron) com renderização segura via CPU (`RenderMode.SoftwareOnly`), layout Fluent em 2 janelas (**Launch Menu** + **Settings Window**), alternância entre **Light Mode** e **Dark Mode**, **Instalador/Atualizador Automático de Pacotes da CDN do Roblox** (`setup.rbxcdn.com` com cache MD5), Multi-Instância (`ROBLOX_singletonMutex`), geolocalização de servidores e Discord Rich Presence via Named Pipe.
-- 🐧 **NRBlox Linux Edition (`nrblox-linux` em [`linux/`](./linux))**: Launcher Desktop **100% nativo para Linux (X11 & Wayland)**, construído para gerenciar **Sober (Flatpak)**, **Vinegar** e **Prefixos Wine64 / Proton-GE**, com seleção de driver **Vulkan ICD (`RADV`, `ANV`, `NVIDIA`)**, **Feral GameMode (`gamemoderun`)**, **MangoHud**, **Gamescope**, **Esync/Fsync**, e Discord Rich Presence via socket `AF_UNIX`.
+- 🐧 **NRBlox Linux Edition (`nrblox-linux` + `nrblox-core` em [`linux/`](./linux))**: Launcher e Runtime **100% próprios para Linux (X11 & Wayland)**, sem dependência de wrappers de terceiros! Inclui o binário nativo em C **`nrblox-core`** ([`nrblox_linux_core.c`](./linux/runtime/nrblox_linux_core.c)), a reimplementação open-source em C++ do **`WebView2Loader.dll` & NTDLL/Registry Cloak** ([`nrblox_wine_cloak.cpp`](./linux/runtime/nrblox_wine_cloak.cpp)), e o **Instalador Direto da CDN do Roblox (`RobloxLinuxCdnInstaller`)** que baixa e extrai os 21 pacotes oficiais com barra de progresso em MB em tempo real, rodando com **Vulkan / DXVK**, **Esync/Fsync**, **Feral GameMode** e **MangoHud**.
 
 ---
 
@@ -42,7 +42,7 @@ Toda a documentação detalhada está disponível diretamente na nossa **Wiki no
    ```
 
 ### 🐧 No Linux (Instalação Completa em 1 Comando via CLI)
-Basta colar o comando abaixo no terminal. Ele instala automaticamente as dependências (`python3-tk`, `flatpak`, `xdg-utils`), configura o runtime **Sober (`org.vinegarhq.Sober`)**, registra os protocolos `roblox-player://` no sistema, cria o comando global `nrblox` e **já abre o launcher na tela com o mesmo layout do Windows**:
+Basta colar o comando abaixo no terminal. Ele instala as dependências nativas, compila o motor em C **`nrblox-core`** e o **`WebView2Loader.dll`** open-source em C++, registra os protocolos `roblox-player://`, cria o comando global `nrblox` e **já abre o launcher na tela com o mesmo layout do Windows**:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/FaelSemW/NRBlox/main/linux/install-linux.sh | bash
 ```
@@ -57,7 +57,7 @@ nrblox
 
 ```text
 NRBlox/
-├── NRBlox.exe                           # Launcher Nativo Windows (C# WPF Desktop)
+├── NRBlox.exe                           # Launcher Nativo Windows Standalone (C# WPF Desktop)
 ├── windows/                             # Código-Fonte Exclusivo do Launcher Windows (C# / WPF)
 │   ├── build-windows.ps1                # Script de compilação nativa via csc.exe + WPF
 │   └── src/
@@ -70,12 +70,15 @@ NRBlox/
 │           ├── NRBloxMenuWindow.cs      # Janela Inicial de Menu Rápido (Launch / Studio / Settings / Wiki)
 │           ├── NRBloxMainWindow.cs      # Janela Completa de Configurações (8 Abas + Test Mode)
 │           └── NRBloxBootstrapperWindow.cs # Janela do Bootstrapper com Download/Extração Automática
-├── linux/                               # Código-Fonte Exclusivo do Launcher Linux (X11/Wayland)
+├── linux/                               # Código-Fonte Exclusivo do Launcher & Runtime Linux
 │   ├── nrblox-linux                     # Executável do Launcher Linux
-│   ├── install-linux.sh                 # Instalador XDG Desktop & MIME Protocols
+│   ├── install-linux.sh                 # Instalador CLI de 1 Comando (Compila nrblox-core + WebView2Loader)
 │   ├── nrblox-linux.desktop             # Entrada Freedesktop (.desktop)
+│   ├── runtime/
+│   │   ├── nrblox_linux_core.c          # Runner Nativo Linux em C (Prefixo Isolado, Vulkan/DXVK, Esync/Fsync)
+│   │   └── nrblox_wine_cloak.cpp        # WebView2Loader.dll Open-Source & NTDLL/Environment Cloak em C++
 │   └── src/
-│       └── nrblox_linux_app.py          # Interface Nativa Linux (Dark/Light) + Sober/Vinegar/Wine64
+│       └── nrblox_linux_app.py          # Interface Fluent 2-Janelas + Instalador Direto da CDN do Roblox
 ├── roblox-version-11f155f3450f4c8e/     # Componentes Open-Source para a Versão Local do Cliente
 │   ├── NRBloxPlayerLauncher.exe         # Lançador nativo open-source para version-11f155f3450f4c8e
 │   └── open-source-runtime/

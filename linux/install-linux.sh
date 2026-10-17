@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 # ============================================================================
-# NRBlox (Linux Native Edition) — One-Command CLI Installer & Auto-Launcher
+# NRBlox (Linux Native Edition) — Official One-Command CLI Installer
 # Author: FaelSemW (https://github.com/FaelSemW/NRBlox)
 # Community Discord: https://discord.gg/M8j8JnQSCx
+# License: MIT (100% Open Source)
+# ============================================================================
+# Installs NRBlox's own Native Linux Runtime (`nrblox-core` + Open-Source
+# `WebView2Loader.dll` + Direct Roblox CDN Downloader/Extractor) with zero
+# third-party Sober/Vinegar wrappers and launches the GUI automatically!
+#
 # Usage (1-Line CLI):
 #   curl -fsSL https://raw.githubusercontent.com/FaelSemW/NRBlox/main/linux/install-linux.sh | bash
 # ============================================================================
@@ -15,63 +21,69 @@ BIN_DIR="${HOME}/.local/bin"
 APPS_DIR="${HOME}/.local/share/applications"
 
 echo "============================================================"
-echo "  ⚡ NRBlox (Linux Native Edition) — CLI Auto-Installer"
+echo "  ⚡ NRBlox (Linux Native Edition) — Official CLI Installer"
 echo "  GitHub: https://github.com/FaelSemW/NRBlox"
 echo "  Discord: https://discord.gg/M8j8JnQSCx"
 echo "============================================================"
 
-# 1. Check & install system dependencies (python3, tkinter, flatpak, xdg-utils, curl)
+# 1. Install native Linux dependencies (python3-tk, gcc, mingw-w64, wine64, xdg-utils)
 install_deps() {
-    if python3 -c "import tkinter" >/dev/null 2>&1 && command -v curl >/dev/null 2>&1; then
-        return 0
-    fi
-    echo "[NRBlox-CLI] Verificando dependências do sistema (python3-tk, flatpak, xdg-utils)..."
+    echo "[NRBlox-CLI] Verificando dependências nativas do Linux..."
     if command -v apt-get >/dev/null 2>&1; then
-        sudo apt-get update -y && sudo apt-get install -y python3 python3-tk curl xdg-utils flatpak
+        sudo apt-get update -y && sudo apt-get install -y python3 python3-tk gcc g++-mingw-w64-x86-64 wine64 curl xdg-utils
     elif command -v pacman >/dev/null 2>&1; then
-        sudo pacman -Sy --noconfirm python tk curl xdg-utils flatpak
+        sudo pacman -Sy --noconfirm python tk gcc mingw-w64-gcc wine curl xdg-utils
     elif command -v dnf >/dev/null 2>&1; then
-        sudo dnf install -y python3 python3-tkinter curl xdg-utils flatpak
+        sudo dnf install -y python3 python3-tkinter gcc mingw64-gcc-c++ wine curl xdg-utils
     elif command -v zypper >/dev/null 2>&1; then
-        sudo zypper install -y python3 python3-tk curl xdg-utils flatpak
+        sudo zypper install -y python3 python3-tk gcc cross-x86_64-w64-mingw32-gcc-c++ wine curl xdg-utils
     fi
 }
 
-install_deps || true
-
-# 2. Ensure Sober (Flatpak) or Wine runner is ready
-if command -v flatpak >/dev/null 2>&1; then
-    flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >/dev/null 2>&1 || true
-    if ! flatpak list --app 2>/dev/null | grep -q "org.vinegarhq.Sober"; then
-        echo "[NRBlox-CLI] Instalando runtime Sober (org.vinegarhq.Sober) via Flatpak..."
-        flatpak install --user -y flathub org.vinegarhq.Sober || true
-    fi
+if ! python3 -c "import tkinter" >/dev/null 2>&1 || ! command -v gcc >/dev/null 2>&1; then
+    install_deps || true
 fi
 
-# 3. Prepare directories
-mkdir -p "${INSTALL_DIR}/src" "${INSTALL_DIR}/assets/icons" "${BIN_DIR}" "${APPS_DIR}"
+# 2. Prepare NRBlox directories
+mkdir -p "${INSTALL_DIR}/src" "${INSTALL_DIR}/runtime" "${INSTALL_DIR}/bin" "${INSTALL_DIR}/assets/icons" "${BIN_DIR}" "${APPS_DIR}"
 
-# 4. Copy from local clone if available, otherwise download directly from GitHub
+# 3. Copy from local clone or download directly from GitHub
 SCRIPT_DIR=""
 if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 fi
 
 if [ -n "${SCRIPT_DIR}" ] && [ -f "${SCRIPT_DIR}/src/nrblox_linux_app.py" ]; then
-    echo "[NRBlox-CLI] Copiando arquivos locais para ${INSTALL_DIR}..."
+    echo "[NRBlox-CLI] Copiando código-fonte local para ${INSTALL_DIR}..."
     cp -r "${SCRIPT_DIR}/src/"* "${INSTALL_DIR}/src/"
+    cp -r "${SCRIPT_DIR}/runtime/"* "${INSTALL_DIR}/runtime/"
     if [ -d "${SCRIPT_DIR}/../assets" ]; then
         cp -r "${SCRIPT_DIR}/../assets" "${INSTALL_DIR}/"
     fi
 else
-    echo "[NRBlox-CLI] Baixando motor nativo NRBlox Linux do GitHub..."
+    echo "[NRBlox-CLI] Baixando motor nativo NRBlox Linux e código-fonte C/C++ do GitHub..."
     curl -fsSL "${REPO_RAW_BASE}/linux/src/nrblox_linux_app.py" -o "${INSTALL_DIR}/src/nrblox_linux_app.py"
+    curl -fsSL "${REPO_RAW_BASE}/linux/runtime/nrblox_linux_core.c" -o "${INSTALL_DIR}/runtime/nrblox_linux_core.c"
+    curl -fsSL "${REPO_RAW_BASE}/linux/runtime/nrblox_wine_cloak.cpp" -o "${INSTALL_DIR}/runtime/nrblox_wine_cloak.cpp"
     curl -fsSL "${REPO_RAW_BASE}/assets/icons/IconNRBlox.ico" -o "${INSTALL_DIR}/assets/icons/IconNRBlox.ico" || true
 fi
 
 chmod +x "${INSTALL_DIR}/src/nrblox_linux_app.py"
 
-# 5. Create executable wrapper in ~/.local/bin/nrblox and ~/.local/bin/nrblox-linux
+# 4. Compile NRBlox Native Linux Core (`nrblox-core`) and Open-Source `WebView2Loader.dll`
+if command -v gcc >/dev/null 2>&1; then
+    echo "[NRBlox-CLI] Compilando binário nativo Linux: nrblox-core..."
+    gcc -O2 "${INSTALL_DIR}/runtime/nrblox_linux_core.c" -o "${INSTALL_DIR}/bin/nrblox-core"
+    chmod +x "${INSTALL_DIR}/bin/nrblox-core"
+fi
+
+if command -v x86_64-w64-mingw32-g++ >/dev/null 2>&1; then
+    echo "[NRBlox-CLI] Compilando WebView2Loader.dll open-source e NTDLL Cloak..."
+    x86_64-w64-mingw32-g++ -shared -O2 "${INSTALL_DIR}/runtime/nrblox_wine_cloak.cpp" \
+        -o "${INSTALL_DIR}/bin/WebView2Loader.dll" -lole32 -static-libgcc -static-libstdc++ || true
+fi
+
+# 5. Create global CLI command `nrblox` and `nrblox-linux`
 cat > "${INSTALL_DIR}/nrblox-linux" << 'EOF'
 #!/usr/bin/env bash
 exec python3 "${HOME}/.local/share/nrblox-linux/src/nrblox_linux_app.py" "$@"
@@ -81,7 +93,6 @@ chmod +x "${INSTALL_DIR}/nrblox-linux"
 ln -sf "${INSTALL_DIR}/nrblox-linux" "${BIN_DIR}/nrblox-linux"
 ln -sf "${INSTALL_DIR}/nrblox-linux" "${BIN_DIR}/nrblox"
 
-# Ensure ~/.local/bin is in PATH
 for rc in "${HOME}/.bashrc" "${HOME}/.zshrc"; do
     if [ -f "${rc}" ] && ! grep -q ".local/bin" "${rc}"; then
         echo 'export PATH="${HOME}/.local/bin:${PATH}"' >> "${rc}"
@@ -89,11 +100,11 @@ for rc in "${HOME}/.bashrc" "${HOME}/.zshrc"; do
 done
 export PATH="${BIN_DIR}:${PATH}"
 
-# 6. Create Desktop entry & register roblox-player:// protocol
+# 6. Register Desktop Entry & XDG URI Protocols (roblox-player://, roblox://, nrblox://)
 cat > "${APPS_DIR}/nrblox-linux.desktop" << EOF
 [Desktop Entry]
 Name=NRBlox
-Comment=NRBlox — Native Roblox Launcher, FastFlag & Mod Controller
+Comment=NRBlox — Official Native Roblox Launcher, FastFlag & Mod Controller
 Exec=${BIN_DIR}/nrblox-linux %u
 Terminal=false
 Type=Application
@@ -119,11 +130,12 @@ fi
 
 echo ""
 echo "✅ [NRBlox-CLI] Instalação concluída com sucesso!"
-echo "   • Comando global no terminal: nrblox (ou nrblox-linux)"
-echo "   • Protocolos roblox-player:// e roblox:// registrados!"
+echo "   • Motor Nativo Compilado: ${INSTALL_DIR}/bin/nrblox-core"
+echo "   • Comando Global: nrblox (ou nrblox-linux)"
+echo "   • Ao clicar em 'Launch Roblox', o NRBlox baixa e extrai os 21 pacotes oficiais direto da CDN!"
 echo ""
 
-# 7. Auto-launch NRBlox GUI if an X11 or Wayland display is active
+# 7. Auto-launch NRBlox GUI right after CLI installation
 if [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
     echo "🚀 [NRBlox-CLI] Abrindo o launcher NRBlox..."
     nohup "${BIN_DIR}/nrblox-linux" >/dev/null 2>&1 &

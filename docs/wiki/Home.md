@@ -14,11 +14,11 @@ O **NRBlox** é um ecossistema de inicialização, otimização de motor (`FastF
    - Interface **Bento Grid** com alternância instantânea entre **Modo Escuro (Dark Mode)** e **Modo Claro (Light Mode)**.
    - Janela nativa de Bootstrapper, bloqueio de versão (`version-11f155f3450f4c8e`), suporte a **Múltiplas Instâncias (`ROBLOX_singletonMutex`)**, injeção direta em `ClientAppSettings.json`, geolocalização de servidores UDMUX e Discord Rich Presence via Named Pipe.
 
-2. **🐧 NRBlox Linux Edition (`nrblox-linux`)**:
-   - Launcher Desktop **100% Nativo para Linux (X11 & Wayland)**.
-   - Gerenciamento dedicado de runners Linux: **Sober (`org.vinegarhq.Sober` Flatpak)**, **Vinegar** e **Prefixos Wine64 / Proton-GE**.
-   - Controle direto do ambiente gráfico e kernel Linux: seleção de driver **Vulkan ICD (`AMD RADV`, `Intel ANV`, `NVIDIA`)**, **Feral GameMode (`gamemoderun`)**, **MangoHud (`mangohud --dlsym`)**, **Gamescope**, **Esync/Fsync** e **NVIDIA PRIME Render Offload**.
-   - Sincronização simultânea de FastFlags e Asset Overlays com o `config.json` do Sober e `ClientAppSettings.json` do Wine, além de Discord Rich Presence via socket `AF_UNIX`.
+2. **🐧 NRBlox Linux Edition (`nrblox-linux` + `nrblox-core`)**:
+   - Launcher e Runtime **100% Próprios para Linux (X11 & Wayland)**, sem dependência de wrappers de terceiros.
+   - Inclui o runner nativo em C **`nrblox-core`**, a reimplementação open-source em C++ do **`WebView2Loader.dll` & NTDLL/Registry Cloak**, e o **Instalador Direto da CDN do Roblox (`RobloxLinuxCdnInstaller`)** que baixa e extrai os 21 pacotes oficiais com verificação MD5.
+   - Controle direto do ambiente gráfico e kernel Linux: seleção de driver **Vulkan ICD (`AMD RADV`, `Intel ANV`, `NVIDIA`)**, **Feral GameMode (`gamemoderun`)**, **MangoHud (`mangohud --dlsym`)** e **Esync/Fsync**.
+   - Sincronização direta de FastFlags em `ClientSettings/ClientAppSettings.json` e Mods dentro de `~/.local/share/nrblox-linux/Versions/version-...`, além de Discord Rich Presence via socket `AF_UNIX`.
 
 ---
 

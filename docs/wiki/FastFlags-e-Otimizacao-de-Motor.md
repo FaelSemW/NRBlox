@@ -2,7 +2,7 @@
 
 💬 **Comunidade no Discord:** [https://discord.gg/M8j8JnQSCx](https://discord.gg/M8j8JnQSCx)
 
-O **NRBlox** gerencia de forma segura e transacional o arquivo `ClientSettings\ClientAppSettings.json` dentro da versão ativa do cliente (`version-11f155f3450f4c8e` no Windows, ou `config.json` do Sober / prefixo Wine no Linux).
+O **NRBlox** gerencia de forma segura e transacional o arquivo `ClientSettings\ClientAppSettings.json` dentro da versão ativa do cliente (`%LocalAppData%\Roblox\Versions\version-...` no Windows e `~/.local/share/nrblox-linux/Versions/version-...` no Linux).
 
 ---
 

@@ -43,13 +43,12 @@ curl -fsSL https://raw.githubusercontent.com/FaelSemW/NRBlox/main/linux/install-
 ```
 
 ### O que o instalador CLI faz automaticamente:
-1. Detecta sua distribuição (`apt`, `pacman`, `dnf` ou `zypper`) e garante que `python3`, `python3-tk`, `curl`, `flatpak` e `xdg-utils` estejam instalados.
-2. Configura o repositório Flathub e instala automaticamente o runtime **Sober (`org.vinegarhq.Sober`)** caso ainda não esteja presente.
+1. Detecta sua distribuição (`apt`, `pacman`, `dnf` ou `zypper`) e garante que `python3`, `python3-tk`, `gcc`, `mingw-w64`, `wine64`, `curl` e `xdg-utils` estejam instalados.
+2. Compila localmente o runner nativo em C **`nrblox-core`** (`linux/runtime/nrblox_linux_core.c`) e a biblioteca open-source **`WebView2Loader.dll` & NTDLL Cloak** (`linux/runtime/nrblox_wine_cloak.cpp`).
 3. Baixa o motor do NRBlox Linux para `~/.local/share/nrblox-linux` e cria os comandos globais `nrblox` e `nrblox-linux` em `~/.local/bin`.
 4. Cria o atalho no menu de aplicativos (`~/.local/share/applications/nrblox-linux.desktop`) e na Área de Trabalho, registrando os protocolos `roblox-player://`, `roblox://` e `nrblox://` via `xdg-mime`.
 5. **Abre automaticamente a janela do NRBlox** assim que a instalação termina!
 
-### Runners Suportados no Linux
-- **Sober (`org.vinegarhq.Sober` via Flatpak)**: Instalado e sincronizado automaticamente (`~/.var/app/org.vinegarhq.Sober/config/sober/config.json`).
-- **Vinegar**: Suporte completo para Player e Roblox Studio via Wine-GE.
-- **Prefixo Wine64 / Proton Customizado**: Suporte a `WINEESYNC=1`, `WINEFSYNC=1`, `gamemoderun` e `mangohud`.
+### Como o NRBlox Linux Baixa e Executa o Jogo
+- **Instalador Direto da CDN (`RobloxLinuxCdnInstaller`)**: Ao clicar em **Launch Roblox**, se o cliente ainda não estiver instalado em `~/.local/share/nrblox-linux/Versions/version-...`, a janela do Bootstrapper do NRBlox Linux baixa e extrai automaticamente os **21 pacotes `.zip` oficiais** direto de `setup.rbxcdn.com` com verificação de hash MD5!
+- **Runtime Nativo Próprio (`nrblox-core` + `WebView2Loader.dll` Open-Source)**: Gerencia um prefixo isolado (`~/.local/share/nrblox-linux/prefix`), injeta o `WebView2Loader.dll` open-source, limpa chaves de fingerprint do registro (`HKLM\Software\Wine`) e inicia o cliente com `WINEESYNC=1`, `WINEFSYNC=1`, `Vulkan / DXVK`, `gamemoderun` e `mangohud`.
