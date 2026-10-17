@@ -42,7 +42,7 @@ except ImportError:
 
 DISCORD_URL = "https://discord.gg/M8j8JnQSCx"
 GITHUB_REPO_URL = "https://github.com/FaelSemW/NRBlox"
-GITHUB_WIKI_URL = "https://github.com/FaelSemW/NRBlox/wiki"
+GITHUB_WIKI_URL = "https://github.com/FaelSemW/NRBlox/blob/main/docs/wiki/Home.md"
 TARGET_VERSION_GUID = "version-11f155f3450f4c8e"
 
 

@@ -19,7 +19,7 @@ namespace NRBlox.Windows.Core
     {
         public static readonly string DiscordUrl = "https://discord.gg/M8j8JnQSCx";
         public static readonly string GitHubRepoUrl = "https://github.com/FaelSemW/NRBlox";
-        public static readonly string GitHubWikiUrl = "https://github.com/FaelSemW/NRBlox/wiki";
+        public static readonly string GitHubWikiUrl = "https://github.com/FaelSemW/NRBlox/blob/main/docs/wiki/Home.md";
         public static readonly string TargetVersionGuid = "version-11f155f3450f4c8e";
 
         public static string BaseDir

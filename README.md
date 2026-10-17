@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://discord.gg/M8j8JnQSCx"><img src="https://img.shields.io/badge/Discord-Comunidade%20Oficial-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord Oficial"></a>
-  <a href="https://github.com/FaelSemW/NRBlox/wiki"><img src="https://img.shields.io/badge/GitHub%20Wiki-Documenta%C3%A7%C3%A3o%20Completa-00E5FF?style=for-the-badge&logo=github&logoColor=black" alt="Wiki Oficial"></a>
+  <a href="https://github.com/FaelSemW/NRBlox/blob/main/docs/wiki/Home.md"><img src="https://img.shields.io/badge/GitHub%20Wiki-Documenta%C3%A7%C3%A3o%20Completa-00E5FF?style=for-the-badge&logo=github&logoColor=black" alt="Wiki Oficial"></a>
   <img src="https://img.shields.io/badge/Windows-WPF%20Nativo%20(.exe)-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows WPF">
   <img src="https://img.shields.io/badge/Linux-Sober%20%7C%20Vinegar%20%7C%20Wine64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux Engine">
   <img src="https://img.shields.io/badge/Licen%C3%A7a-MIT%20(100%25%20Open%20Source)-10B981?style=for-the-badge" alt="MIT License">
@@ -17,14 +17,14 @@ O **NRBlox** é uma plataforma 100% open-source de inicialização, gerenciament
 
 ## 📖 Wiki Oficial & Comunidade
 
-Toda a documentação detalhada está disponível diretamente na nossa **Wiki do GitHub** (e espelhada em [`docs/wiki/`](./docs/wiki)):
+Toda a documentação detalhada está disponível diretamente na nossa **Wiki no GitHub**:
 
-- 🏠 [**Página Inicial da Wiki**](https://github.com/FaelSemW/NRBlox/wiki) ([ver arquivo local](./docs/wiki/Home.md))
-- 📦 [**Guia de Instalação (Windows & Linux)**](https://github.com/FaelSemW/NRBlox/wiki/Instalacao-Windows-e-Linux) ([ver arquivo local](./docs/wiki/Instalacao-Windows-e-Linux.md))
-- 🚀 [**FastFlags & Otimização Gráfica do Motor**](https://github.com/FaelSemW/NRBlox/wiki/FastFlags-e-Otimizacao-de-Motor) ([ver arquivo local](./docs/wiki/FastFlags-e-Otimizacao-de-Motor.md))
-- 🎨 [**Mods, Cursores Clássicos, Sons e Fontes**](https://github.com/FaelSemW/NRBlox/wiki/Mods-Cursores-Sons-e-Fontes) ([ver arquivo local](./docs/wiki/Mods-Cursores-Sons-e-Fontes.md))
-- 📡 [**Monitor de Servidores, Geolocalização IP & Discord RPC**](https://github.com/FaelSemW/NRBlox/wiki/Monitor-de-Servidores-e-Discord-RPC) ([ver arquivo local](./docs/wiki/Monitor-de-Servidores-e-Discord-RPC.md))
-- 🏗️ [**Arquitetura Nativa (Windows WPF + Linux Engine + Open-Source Runtime)**](https://github.com/FaelSemW/NRBlox/wiki/Arquitetura-Nativa-Windows-e-Linux) ([ver arquivo local](./docs/wiki/Arquitetura-Nativa-Windows-e-Linux.md))
+- 🏠 [**Página Inicial da Wiki (Visão Geral)**](https://github.com/FaelSemW/NRBlox/blob/main/docs/wiki/Home.md)
+- 📦 [**Guia de Instalação (Windows & Linux)**](https://github.com/FaelSemW/NRBlox/blob/main/docs/wiki/Instalacao-Windows-e-Linux.md)
+- 🚀 [**FastFlags & Otimização Gráfica do Motor**](https://github.com/FaelSemW/NRBlox/blob/main/docs/wiki/FastFlags-e-Otimizacao-de-Motor.md)
+- 🎨 [**Mods, Cursores Clássicos, Sons e Fontes**](https://github.com/FaelSemW/NRBlox/blob/main/docs/wiki/Mods-Cursores-Sons-e-Fontes.md)
+- 📡 [**Monitor de Servidores, Geolocalização IP & Discord RPC**](https://github.com/FaelSemW/NRBlox/blob/main/docs/wiki/Monitor-de-Servidores-e-Discord-RPC.md)
+- 🏗️ [**Arquitetura Nativa (Windows WPF + Linux Engine + Open-Source Runtime)**](https://github.com/FaelSemW/NRBlox/blob/main/docs/wiki/Arquitetura-Nativa-Windows-e-Linux.md)
 
 💬 **Participe da nossa Comunidade Oficial no Discord:**  
 👉 **[https://discord.gg/M8j8JnQSCx](https://discord.gg/M8j8JnQSCx)**
