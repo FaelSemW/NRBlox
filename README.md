@@ -10,7 +10,7 @@
 
 O **NRBlox** é uma plataforma 100% open-source de inicialização, gerenciamento de **FastFlags**, aplicação de **Mods** e monitoramento de servidores em tempo real para o Roblox, composta por **dois launchers nativos independentes e projetados especificamente para cada sistema operacional**:
 
-- 🪟 **NRBlox Windows Edition (`NRBlox.exe` em [`windows/`](./windows))**: Aplicativo Desktop **100% nativo em C# / WPF** (sem abas de navegador ou Electron), com interface **Bento Grid**, alternância em tempo real entre **Modo Escuro (Dark Mode)** e **Modo Claro (Light Mode)**, janela própria de Bootstrapper, Multi-Instância (`ROBLOX_singletonMutex`), geolocalização de servidores e Discord Rich Presence via Named Pipe.
+- 🪟 **NRBlox Windows Edition (`NRBlox.exe` em [`windows/`](./windows))**: Aplicativo Desktop **100% nativo em C# / WPF** (sem abas de navegador ou Electron) com renderização segura via CPU (`RenderMode.SoftwareOnly`), layout Fluent em 2 janelas (**Launch Menu** + **Settings Window**), alternância entre **Light Mode** e **Dark Mode**, **Instalador/Atualizador Automático de Pacotes da CDN do Roblox** (`setup.rbxcdn.com` com cache MD5), Multi-Instância (`ROBLOX_singletonMutex`), geolocalização de servidores e Discord Rich Presence via Named Pipe.
 - 🐧 **NRBlox Linux Edition (`nrblox-linux` em [`linux/`](./linux))**: Launcher Desktop **100% nativo para Linux (X11 & Wayland)**, construído para gerenciar **Sober (Flatpak)**, **Vinegar** e **Prefixos Wine64 / Proton-GE**, com seleção de driver **Vulkan ICD (`RADV`, `ANV`, `NVIDIA`)**, **Feral GameMode (`gamemoderun`)**, **MangoHud**, **Gamescope**, **Esync/Fsync**, e Discord Rich Presence via socket `AF_UNIX`.
 
 ---
@@ -35,7 +35,7 @@ Toda a documentação detalhada está disponível diretamente na nossa **Wiki no
 
 ### 🪟 No Windows (`NRBlox.exe`)
 1. Execute diretamente **`NRBlox.exe`** na raiz do repositório.
-2. Alterne entre **🌙 Modo Escuro** e **☀️ Modo Claro** diretamente no topo da janela nativa.
+2. Clique em **Launch Roblox** (se o Roblox ainda não estiver instalado no seu PC, o Bootstrapper do NRBlox baixa e extrai automaticamente todos os 21 pacotes oficiais da CDN do Roblox), **Launch Roblox Studio** ou **Configure settings**.
 3. Para compilar o executável nativo WPF a partir do código-fonte C#:
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\windows\build-windows.ps1
@@ -64,14 +64,15 @@ NRBlox/
 ├── windows/                             # Código-Fonte Exclusivo do Launcher Windows (C# / WPF)
 │   ├── build-windows.ps1                # Script de compilação nativa via csc.exe + WPF
 │   └── src/
-│       ├── Program.cs                   # Entry point Windows & CLI
+│       ├── Program.cs                   # Entry point Windows, RenderMode.SoftwareOnly & CLI
 │       ├── Core/
 │       │   ├── NRBloxConfig.cs          # Configurações, FastFlagEngine & ModEngine (.nrblox_orig)
-│       │   └── NRBloxServices.cs        # Discord RPC Named Pipe, ActivityWatcher & Registry
+│       │   └── NRBloxServices.cs        # RobloxPackageInstaller (CDN/MD5), Discord RPC & ActivityWatcher
 │       └── UI/
-│           ├── NRBloxTheme.cs           # Motor de Temas Dinâmicos (Dark Mode & Light Mode)
-│           ├── NRBloxBootstrapperWindow.cs # Janela Nativa do Bootstrapper
-│           └── NRBloxMainWindow.cs      # Interface Principal Bento Grid em WPF
+│           ├── NRBloxTheme.cs           # Motor de Temas Fluent (Light Mode & Dark Mode)
+│           ├── NRBloxMenuWindow.cs      # Janela Inicial de Menu Rápido (Launch / Studio / Settings / Wiki)
+│           ├── NRBloxMainWindow.cs      # Janela Completa de Configurações (8 Abas + Test Mode)
+│           └── NRBloxBootstrapperWindow.cs # Janela do Bootstrapper com Download/Extração Automática
 ├── linux/                               # Código-Fonte Exclusivo do Launcher Linux (X11/Wayland)
 │   ├── nrblox-linux                     # Executável do Launcher Linux
 │   ├── install-linux.sh                 # Instalador XDG Desktop & MIME Protocols

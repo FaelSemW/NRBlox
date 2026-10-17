@@ -12,9 +12,10 @@ O launcher Windows é um executável **100% nativo em C# / WPF**, sem necessidad
 
 ### Executando o NRBlox
 1. Abra diretamente o executável **`NRBlox.exe`** na raiz do projeto (ou em `windows/bin/NRBlox.exe`).
-2. Na aba **`🛠️ Sistema & Sobre`**, clique em:
-   - **Registrar Protocolos**: Registra `roblox-player://`, `roblox://` e `nrblox://` no Registro do Windows (`HKCU\Software\Classes`) para que o botão **Play** do site do Roblox inicie sempre através do NRBlox.
-   - **Criar Atalhos**: Cria os atalhos `NRBlox` e `Jogar Roblox (NRBlox)` na sua Área de Trabalho.
+2. Na janela inicial (**Launch Menu**), você pode:
+   - **Launch Roblox**: Inicia o Roblox imediatamente. Caso o Roblox não esteja instalado no PC (ou se **Force Roblox reinstallation** estiver marcado na aba *Bootstrapper*), o NRBlox consulta `clientsettingscdn.roblox.com`, baixa automaticamente os 21 pacotes `.zip` oficiais de `setup.rbxcdn.com` com verificação de cache MD5, extrai tudo em `%LocalAppData%\Roblox\Versions\version-...`, aplica suas FastFlags e Mods e abre o jogo.
+   - **Launch Roblox Studio**: Inicia ou instala automaticamente o Roblox Studio.
+   - **Configure settings**: Abre o painel completo de configurações (`Integrations`, `Bootstrapper`, `Mods`, `Engine Settings`, `Appearance`, `Shortcuts`, `NRBlox` e `About`).
 
 ### Compilando a partir do Código-Fonte no Windows
 O NRBlox utiliza o compilador nativo do Windows (`csc.exe` + assemblies WPF):
@@ -23,11 +24,13 @@ powershell -ExecutionPolicy Bypass -File .\windows\build-windows.ps1
 ```
 
 ### Argumentos de Linha de Comando (Windows)
-- `NRBlox.exe` — Abre o painel de controle nativo do NRBlox (Dark/Light Mode).
-- `NRBlox.exe -player` — Inicia diretamente o cliente Roblox com a janela do Bootstrapper.
+- `NRBlox.exe` — Abre o menu de inicialização rápida do NRBlox (**Launch Menu**).
+- `NRBlox.exe -settings` — Abre diretamente a janela de configurações (**Settings Window**).
+- `NRBlox.exe -player` — Inicia diretamente o cliente Roblox com a janela do Bootstrapper (baixando/extraindo automaticamente caso ausente).
 - `NRBlox.exe -studio` — Inicia diretamente o Roblox Studio.
+- `NRBlox.exe --install-player` — Baixa, valida (MD5) e extrai todos os pacotes da versão atual do Roblox via linha de comando.
 - `NRBlox.exe --verify` — Exibe o relatório de integridade da instalação no console.
-- `NRBlox.exe --register-protocols` — Registra silenciosamente os handlers de protocolo da web.
+- `NRBlox.exe --register-protocols` — Registra silenciosamente os handlers de protocolo `roblox-player:`, `roblox:` e `nrblox:` no Registro do Windows.
 
 ---
 

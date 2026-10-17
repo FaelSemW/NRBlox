@@ -29,7 +29,7 @@
   "UseOldAvatarBackground": false,
   "UseOldCharacterSounds": false,
   "UseClassicDeathSound": false,
-  "PreferredEmojiType": "Default (Twemoji)",
+  "PreferredEmojiType": "Windows 8.1",
   "CustomFontPath": "",
   "AppliedModManifest": [
     "ClientSettings\\ClientAppSettings.json"
@@ -38,7 +38,7 @@
   "TargetFps": 0,
   "RenderingMode": "D3D11",
   "LightingMode": "Future (Phase 3)",
-  "MsaaMode": "Automatic",
+  "MsaaMode": "4x",
   "DisableDpiScale": true,
   "TextureQuality": "Level 3 (Highest)",
   "ManualFullscreen": true,
