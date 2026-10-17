@@ -1,0 +1,4 @@
+*.sh text eol=lf
+*.py text eol=lf
+*.desktop text eol=lf
+linux/nrblox-linux text eol=lf
