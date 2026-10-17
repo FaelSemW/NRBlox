@@ -412,35 +412,91 @@ class LinuxEngineController:
                 except Exception:
                     pass
 
-    def prepare_native_prefix(self):
-        """Normalizes the isolated NRBlox Linux prefix and cloaks Wine registry fingerprints"""
+    def prepare_native_prefix(self, on_status=None):
+        """Initializes and normalizes the isolated NRBlox Linux prefix without hanging"""
         env = os.environ.copy()
         env["WINEPREFIX"] = str(LinuxPaths.NATIVE_PREFIX)
         env["WINEARCH"] = "win64"
         env["WINEDEBUG"] = "-all"
+        env["WINEDLLOVERRIDES"] = "mscoree,mshtml="
 
-        if self.settings.get("enable_ntdll_cloak", True) and shutil.which("wine64"):
+        system_reg = LinuxPaths.NATIVE_PREFIX / "system.reg"
+        if not system_reg.exists() and shutil.which("wineboot"):
+            if on_status:
+                on_status("Initializing NRBlox Linux prefix (first run)...")
             try:
                 subprocess.run(
-                    ["wine64", "reg", "delete", r"HKLM\Software\Wine", "/f"],
+                    ["wineboot", "-u"],
                     env=env,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    timeout=8,
-                )
-                subprocess.run(
-                    ["wine64", "reg", "delete", r"HKCU\Software\Wine\Explorer", "/f"],
-                    env=env,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=8,
+                    timeout=45,
                 )
             except Exception:
                 pass
 
-    def launch_installed_client(self, version_guid: str, is_studio=False, uri=None):
+        if self.settings.get("enable_ntdll_cloak", True) and shutil.which("wine64"):
+            try:
+                subprocess.run(
+                    ["wine64", "reg", "add", r"HKLM\Software\Microsoft\Windows NT\CurrentVersion", "/v", "CurrentBuild", "/d", "19045", "/f"],
+                    env=env,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=15,
+                )
+            except Exception:
+                pass
+
+    def sync_bionic_runtime_config(self):
+        """Syncs NRBlox FastFlags and Mods into the headless Bionic ELF runtime config if present"""
+        bionic_cfg = Path.home() / ".var" / "app" / "org.vinegarhq.Sober" / "config" / "sober" / "config.json"
+        try:
+            bionic_cfg.parent.mkdir(parents=True, exist_ok=True)
+            data = {}
+            if bionic_cfg.exists():
+                data = json.loads(bionic_cfg.read_text(encoding="utf-8"))
+            data["fflags"] = dict(self.fflags)
+            data["discord_rpc_enabled"] = bool(self.settings.get("enable_discord_rpc", True))
+            bionic_cfg.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+
+    def has_bionic_elf_runtime(self) -> bool:
+        if not shutil.which("flatpak"):
+            return False
+        try:
+            out = subprocess.check_output(["flatpak", "list", "--app"], text=True, stderr=subprocess.DEVNULL)
+            return "org.vinegarhq.Sober" in out
+        except Exception:
+            return False
+
+    def launch_installed_client(self, version_guid: str, is_studio=False, uri=None, on_status=None):
         self.sync_all(version_guid)
-        self.prepare_native_prefix()
+        self.sync_bionic_runtime_config()
+
+        wrappers = []
+        if self.settings.get("enable_gamemode") and shutil.which("gamemoderun"):
+            wrappers.append("gamemoderun")
+        if self.settings.get("enable_mangohud") and shutil.which("mangohud"):
+            wrappers.extend(["mangohud", "--dlsym"])
+
+        # If the Bionic ELF runtime is available on Linux for Player, use it as a headless backend
+        # unless Studio is requested, since Windows RobloxPlayerBeta.dll (Hyperion) blocks Wine64.
+        if not is_studio and self.has_bionic_elf_runtime():
+            cmd = wrappers + ["flatpak", "run", "org.vinegarhq.Sober"]
+            if uri:
+                cmd.append(uri)
+            log_file = Path("/tmp/nrblox-runtime.log")
+            with open(log_file, "w") as lf:
+                proc = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT)
+            time.sleep(2.5)
+            if proc.poll() is not None and proc.returncode != 0:
+                err_txt = log_file.read_text(encoding="utf-8", errors="ignore")[-800:]
+                return False, f"Linux Bionic ELF runtime exited (code {proc.returncode}):\n{err_txt}"
+            return True, "Launched via NRBlox Linux ELF Backend"
+
+        # Otherwise run via NRBlox Native Prefix + nrblox-core (Wine64)
+        self.prepare_native_prefix(on_status=on_status)
 
         vdir = LinuxPaths.VERSIONS_DIR / version_guid
         exe_name = "RobloxStudioBeta.exe" if is_studio else "RobloxPlayerBeta.exe"
@@ -455,14 +511,8 @@ class LinuxEngineController:
         env["WINEESYNC"] = "1" if self.settings.get("enable_esync", True) else "0"
         env["WINEFSYNC"] = "1" if self.settings.get("enable_fsync", True) else "0"
         env["WINE_LARGE_ADDRESS_AWARE"] = "1"
-        env["WINEDEBUG"] = "-all"
-        env["WINEDLLOVERRIDES"] = "WebView2Loader=n,b;d3d11=n,b;dxgi=n,b;mscoree,mshtml="
-
-        wrappers = []
-        if self.settings.get("enable_gamemode") and shutil.which("gamemoderun"):
-            wrappers.append("gamemoderun")
-        if self.settings.get("enable_mangohud") and shutil.which("mangohud"):
-            wrappers.extend(["mangohud", "--dlsym"])
+        env["WINEDEBUG"] = "err+all,fixme-all"
+        env["WINEDLLOVERRIDES"] = "WebView2Loader=n,b;mscoree,mshtml="
 
         launch_arg = uri if uri else "--app"
         if LinuxPaths.CORE_BIN.exists():
@@ -473,8 +523,29 @@ class LinuxEngineController:
                 return False, "Native runtime requires wine64 (run install-linux.sh to install)."
             cmd = wrappers + [wine_bin, str(target_exe), launch_arg]
 
+        log_file = Path("/tmp/nrblox-wine.log")
         try:
-            subprocess.Popen(cmd, cwd=str(vdir), env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            with open(log_file, "w") as lf:
+                proc = subprocess.Popen(cmd, cwd=str(vdir), env=env, stdout=lf, stderr=subprocess.STDOUT)
+
+            # Monitor for 4 seconds to detect immediate Hyperion/Byfron Wine termination
+            for _ in range(8):
+                time.sleep(0.5)
+                if proc.poll() is not None:
+                    log_tail = ""
+                    try:
+                        log_tail = log_file.read_text(encoding="utf-8", errors="ignore").strip()[-600:]
+                    except Exception:
+                        pass
+                    return (
+                        False,
+                        "RobloxPlayerBeta.exe encerrou imediatamente sob o Wine64.\n\n"
+                        "Motivo técnico: O binário Windows do Roblox (RobloxPlayerBeta.dll / Hyperion) "
+                        "possui a seção .text criptografada e bloqueia execução via Wine no kernel Linux "
+                        "(chamando NtTerminateProcess).\n\n"
+                        + (f"Log do Wine (/tmp/nrblox-wine.log):\n{log_tail}" if log_tail else ""),
+                    )
+
             return True, "Launched via NRBlox Linux Native Core: " + " ".join(cmd)
         except Exception as e:
             return False, str(e)
@@ -840,7 +911,12 @@ class NRBloxLinuxApp:
                     return
 
                 update_ui(0.99, "Starting NRBlox Linux Native Core...", "Initializing isolated prefix and Vulkan pipeline...", guid)
-                ok, msg = self.ctrl.launch_installed_client(guid, is_studio=is_studio, uri=uri)
+                ok, msg = self.ctrl.launch_installed_client(
+                    guid,
+                    is_studio=is_studio,
+                    uri=uri,
+                    on_status=lambda st: update_ui(0.99, "Starting NRBlox Linux Native Core...", st, guid),
+                )
                 self.root.after(0, lambda: _finish(ok, msg))
             except Exception as ex:
                 if not self.cancelled:
