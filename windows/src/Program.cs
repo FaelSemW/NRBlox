@@ -1,5 +1,5 @@
 // ============================================================================
-// NRBlox (Windows Native Edition) — Application Entry Point
+// NRBlox (Windows Native Edition) — Safe Application Entry Point
 // Author: FaelSemW (https://github.com/FaelSemW/NRBlox)
 // Community Discord: https://discord.gg/M8j8JnQSCx
 // License: MIT (100% Open Source)
@@ -8,11 +8,13 @@
 using System;
 using System.Reflection;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
 using NRBlox.Windows.Core;
 using NRBlox.Windows.UI;
 
 [assembly: AssemblyTitle("NRBlox")]
-[assembly: AssemblyDescription("NRBlox — Native Windows Roblox Engine Controller & FastFlag Studio")]
+[assembly: AssemblyDescription("NRBlox — Native Windows Roblox Engine Controller & Bootstrapper")]
 [assembly: AssemblyCompany("FaelSemW")]
 [assembly: AssemblyProduct("NRBlox")]
 [assembly: AssemblyCopyright("Copyright © FaelSemW - MIT License")]
@@ -26,12 +28,14 @@ namespace NRBlox.Windows
         [STAThread]
         public static int Main(string[] args)
         {
+            // Force safe CPU/GDI rendering to prevent any DirectX9/DWM GPU driver TDR or BSOD
+            RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+
             NRBloxPaths.EnsureDirectories();
             var settings = JsonHelper.LoadOrCreate<NRBloxSettings>(NRBloxPaths.SettingsFile);
             var fastFlags = new FastFlagEngine(settings);
             var mods = new ModEngine(settings);
 
-            // CLI Mode: --verify
             foreach (string arg in args)
             {
                 if (string.Equals(arg, "--verify", StringComparison.OrdinalIgnoreCase))
@@ -46,9 +50,9 @@ namespace NRBlox.Windows
                 }
             }
 
-            // Check if launched as Bootstrapper (-player, -studio, or roblox-player:// URI)
             bool isPlayerLaunch = false;
             bool isStudioLaunch = false;
+            bool isSettingsDirect = false;
             string launchUri = null;
 
             foreach (string arg in args)
@@ -63,6 +67,12 @@ namespace NRBlox.Windows
                 {
                     isStudioLaunch = true;
                 }
+                else if (string.Equals(arg, "-settings", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(arg, "--settings", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(arg, "-preferences", StringComparison.OrdinalIgnoreCase))
+                {
+                    isSettingsDirect = true;
+                }
                 else if (arg.StartsWith("roblox-player:", StringComparison.OrdinalIgnoreCase) ||
                          arg.StartsWith("roblox:", StringComparison.OrdinalIgnoreCase) ||
                          arg.StartsWith("nrblox:", StringComparison.OrdinalIgnoreCase))
@@ -73,15 +83,24 @@ namespace NRBlox.Windows
             }
 
             var app = new Application();
+
             if (isPlayerLaunch || isStudioLaunch)
             {
-                var bootstrapperWin = new NRBloxBootstrapperWindow(settings, fastFlags, mods, launchUri, isStudioLaunch);
+                var bootstrapperWin = new NRBloxBootstrapperWindow(settings, fastFlags, mods, launchUri, isStudioLaunch, false);
                 app.Run(bootstrapperWin);
                 return 0;
             }
 
-            var mainWin = new NRBloxMainWindow();
-            app.Run(mainWin);
+            if (isSettingsDirect)
+            {
+                var settingsWin = new NRBloxMainWindow("integrations");
+                app.Run(settingsWin);
+                return 0;
+            }
+
+            // Default: Open the comfortable 2-column Launch Menu Window (Screenshot 1)
+            var menuWin = new NRBloxMenuWindow();
+            app.Run(menuWin);
             return 0;
         }
     }

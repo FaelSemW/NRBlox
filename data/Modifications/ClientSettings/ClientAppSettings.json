@@ -1,7 +1,15 @@
 ﻿{
   "FFlagHandleAltEnterFullscreenManually": "False",
-  "FIntDebugForceMSAASamples": "4",
+  "FIntDebugForceMSAASamples": "8",
   "DFFlagDisableDPIScale": "True",
   "DFFlagTextureQualityOverrideEnabled": "True",
-  "DFIntTextureQualityOverride": "3"
+  "DFIntTextureQualityOverride": "3",
+  "DFIntTaskSchedulerTargetFps": "240",
+  "FFlagDebugGraphicsPreferD3D11": "True",
+  "FFlagDebugDisableTelemetryEphemeralCounter": "True",
+  "FFlagDebugDisableTelemetryEphemeralStat": "True",
+  "FFlagDebugDisableTelemetryEventIngest": "True",
+  "FFlagDebugDisableTelemetryPoint": "True",
+  "FFlagDebugDisableTelemetryV2Counter": "True",
+  "FFlagDebugForceFutureIsBrightPhase3": "True"
 }

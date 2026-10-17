@@ -1,5 +1,5 @@
 // ============================================================================
-// NRBlox (Windows Native Edition) — Main Desktop Window (Dark & Light Mode)
+// NRBlox (Windows Native Edition) — Settings Window (Matches Screenshots 2–13)
 // Author: FaelSemW (https://github.com/FaelSemW/NRBlox)
 // Community Discord: https://discord.gg/M8j8JnQSCx
 // License: MIT (100% Open Source)
@@ -24,393 +24,463 @@ namespace NRBlox.Windows.UI
         private readonly NRBloxSettings _settings;
         private readonly FastFlagEngine _fastFlags;
         private readonly ModEngine _mods;
-        private readonly NativeDiscordRpcClient _discord;
-        private readonly ActivityWatcherService _watcher;
 
-        private readonly Dictionary<string, UIElement> _tabViews = new Dictionary<string, UIElement>();
-        private readonly Dictionary<string, Button> _navButtons = new Dictionary<string, Button>();
+        private readonly Dictionary<string, UIElement> _pages = new Dictionary<string, UIElement>();
+        private readonly Dictionary<string, Border> _navItems = new Dictionary<string, Border>();
+        private readonly Dictionary<string, Border> _navIndicators = new Dictionary<string, Border>();
+
         private ContentControl _pageHost;
-        private Button _themeToggleBtn;
-        private TextBlock _statusFooterText;
+        private ListBox _customIntListBox;
+        private ContentControl _customIntDetailHost;
+        private StackPanel _fastFlagRowsPanel;
 
-        // Live UI Labels
-        private TextBlock _flagCountMetric;
-        private TextBlock _fpsMetric;
-        private TextBlock _serverLocationLabel;
-        private TextBlock _serverIpLabel;
-        private TextBlock _serverPlaceJobLabel;
-        private StackPanel _flagListPanel;
-        private StackPanel _historyListPanel;
-        private StackPanel _customIntegrationsPanel;
-
-        public NRBloxMainWindow()
+        public NRBloxMainWindow(string initialTab = "integrations")
         {
             NRBloxPaths.EnsureDirectories();
             _settings = JsonHelper.LoadOrCreate<NRBloxSettings>(NRBloxPaths.SettingsFile);
             _fastFlags = new FastFlagEngine(_settings);
             _mods = new ModEngine(_settings);
-            _discord = new NativeDiscordRpcClient();
-            _watcher = new ActivityWatcherService(_settings, _discord);
 
-            // Sync on startup
-            _fastFlags.SaveAndSync();
-            _mods.ApplyAndSyncMods();
-            SystemIntegrationService.SetMultiInstanceMutex(_settings.MultiInstanceLaunching);
-            _watcher.OnSessionUpdated += OnServerSessionUpdated;
-            _watcher.Start();
-
-            Title = "NRBlox — Windows Engine Controller";
-            Width = 1140;
-            Height = 740;
-            MinWidth = 980;
-            MinHeight = 640;
+            Title = "NRBlox Settings";
+            Width = 980;
+            Height = 620;
+            MinWidth = 820;
+            MinHeight = 520;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            WindowStyle = WindowStyle.None;
-            AllowsTransparency = true;
-            Background = Brushes.Transparent;
+            WindowStyle = WindowStyle.SingleBorderWindow;
+            AllowsTransparency = false;
 
-            bool isDark = !string.Equals(_settings.ThemeMode, "Light", StringComparison.OrdinalIgnoreCase);
-            NRBloxTheme.ApplyTheme(Resources, isDark);
+            NRBloxTheme.ApplyTheme(Resources, _settings.ThemeMode);
+            SetResourceReference(Window.BackgroundProperty, "BgWindowBrush");
 
-            BuildWindowChrome();
-            SwitchTab("home");
+            BuildWindowLayout();
+            NavigateTo(string.IsNullOrEmpty(initialTab) ? "integrations" : initialTab);
         }
 
-        private void BuildWindowChrome()
+        private void BuildWindowLayout()
         {
-            var outerShell = new Border
-            {
-                CornerRadius = new CornerRadius(14),
-                BorderThickness = new Thickness(1.5),
-                Margin = new Thickness(8),
-                ClipToBounds = true
-            };
-            outerShell.SetResourceReference(Border.BackgroundProperty, "BgWindowBrush");
-            outerShell.SetResourceReference(Border.BorderBrushProperty, "BorderSubtleBrush");
-
-            var mainGrid = new Grid();
-            mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(68) });
-            mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(38) });
+            var rootGrid = new Grid();
+            rootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             // =================================================================
-            // ROW 0: Top Command Bar (Horizontal Navigation + Theme + Launch)
+            // ROW 0: Main Body (Left Sidebar + Right Scrollable Page)
             // =================================================================
-            var topBar = new Border
-            {
-                BorderThickness = new Thickness(0, 0, 0, 1),
-                Padding = new Thickness(20, 0, 16, 0)
-            };
-            topBar.SetResourceReference(Border.BackgroundProperty, "BgHeaderBrush");
-            topBar.SetResourceReference(Border.BorderBrushProperty, "BorderSubtleBrush");
-            topBar.MouseLeftButtonDown += (s, e) =>
-            {
-                if (e.ClickCount == 2)
-                    WindowState = (WindowState == WindowState.Maximized) ? WindowState.Normal : WindowState.Maximized;
-                else if (e.LeftButton == MouseButtonState.Pressed)
-                    DragMove();
-            };
+            var bodyGrid = new Grid();
+            bodyGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(240) });
+            bodyGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            var topGrid = new Grid();
-            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            // Left Sidebar
+            var sidebarGrid = new Grid { Margin = new Thickness(12, 14, 12, 8) };
+            sidebarGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            sidebarGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            sidebarGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            // Brand Logo
-            var brandPanel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            var logoBox = new Border
-            {
-                Width = 36,
-                Height = 36,
-                CornerRadius = new CornerRadius(9),
-                Margin = new Thickness(0, 0, 11, 0),
-                Child = new TextBlock
-                {
-                    Text = "⚡",
-                    FontSize = 18,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center
-                }
-            };
-            logoBox.SetResourceReference(Border.BackgroundProperty, "AccentPrimaryBrush");
-            brandPanel.Children.Add(logoBox);
+            var topNavStack = new StackPanel();
+            topNavStack.Children.Add(CreateSidebarNavItem("integrations", "＋", "Integrations"));
+            topNavStack.Children.Add(CreateSidebarNavItem("bootstrapper", "▷", "Bootstrapper"));
+            topNavStack.Children.Add(CreateSidebarNavItem("mods", "🛠", "Mods"));
+            topNavStack.Children.Add(CreateSidebarNavItem("engine", "⚑", "Engine Settings"));
+            topNavStack.Children.Add(CreateSidebarNavItem("appearance", "🖌", "Appearance"));
+            topNavStack.Children.Add(CreateSidebarNavItem("shortcuts", "⊞", "Shortcuts"));
+            Grid.SetRow(topNavStack, 0);
+            sidebarGrid.Children.Add(topNavStack);
 
-            var brandTexts = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            brandTexts.Children.Add(NRBloxTheme.CreateText("NRBLOX", 17, FontWeights.ExtraBold, "TextPrimaryBrush"));
-            brandTexts.Children.Add(NRBloxTheme.CreateText("WINDOWS ENGINE v3.0", 9.5, FontWeights.Bold, "AccentPrimaryBrush"));
-            brandPanel.Children.Add(brandTexts);
-            Grid.SetColumn(brandPanel, 0);
-            topGrid.Children.Add(brandPanel);
+            var bottomNavStack = new StackPanel();
+            bottomNavStack.Children.Add(CreateSidebarNavItem("nrblox", "⚙", "NRBlox"));
+            bottomNavStack.Children.Add(CreateSidebarNavItem("about", "ⓘ", "About"));
+            Grid.SetRow(bottomNavStack, 2);
+            sidebarGrid.Children.Add(bottomNavStack);
 
-            // Center Horizontal Pill Navigation Bar
-            var navBar = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            navBar.Children.Add(CreateNavPill("home", "⚡ Início"));
-            navBar.Children.Add(CreateNavPill("fastflags", "🚀 FastFlags"));
-            navBar.Children.Add(CreateNavPill("mods", "🎨 Mods & Visuais"));
-            navBar.Children.Add(CreateNavPill("server", "📡 Servidor & RPC"));
-            navBar.Children.Add(CreateNavPill("system", "🛠️ Sistema & Sobre"));
-            Grid.SetColumn(navBar, 1);
-            topGrid.Children.Add(navBar);
+            Grid.SetColumn(sidebarGrid, 0);
+            bodyGrid.Children.Add(sidebarGrid);
 
-            // Right Controls: Theme Toggle, Discord, JOGAR, Window Chrome Buttons
-            var rightActions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-
-            _themeToggleBtn = NRBloxTheme.CreateStyledButton(
-                NRBloxTheme.IsDark ? "☀️ Modo Claro" : "🌙 Modo Escuro",
-                false,
-                (s, e) => ToggleTheme(),
-                new Thickness(0, 0, 8, 0)
-            );
-            _themeToggleBtn.Padding = new Thickness(12, 7, 12, 7);
-            rightActions.Children.Add(_themeToggleBtn);
-
-            var discordBtn = NRBloxTheme.CreateStyledButton("💬 Discord", false, (s, e) => OpenUrl(NRBloxPaths.DiscordUrl), new Thickness(0, 0, 8, 0));
-            discordBtn.Padding = new Thickness(12, 7, 12, 7);
-            rightActions.Children.Add(discordBtn);
-
-            var playBtn = NRBloxTheme.CreateStyledButton("▶ JOGAR", true, (s, e) => LaunchRoblox(false, null), new Thickness(0, 0, 14, 0));
-            playBtn.Padding = new Thickness(16, 7, 16, 7);
-            rightActions.Children.Add(playBtn);
-
-            // Window Min / Max / Close
-            rightActions.Children.Add(CreateWindowCtrlBtn("—", (s, e) => WindowState = WindowState.Minimized));
-            rightActions.Children.Add(CreateWindowCtrlBtn("▢", (s, e) => WindowState = (WindowState == WindowState.Maximized) ? WindowState.Normal : WindowState.Maximized));
-            rightActions.Children.Add(CreateWindowCtrlBtn("✕", (s, e) => Close()));
-
-            Grid.SetColumn(rightActions, 2);
-            topGrid.Children.Add(rightActions);
-            topBar.Child = topGrid;
-            Grid.SetRow(topBar, 0);
-            mainGrid.Children.Add(topBar);
-
-            // =================================================================
-            // ROW 1: Main Scrollable Content Host
-            // =================================================================
+            // Right Content ScrollViewer
             var scrollViewer = new ScrollViewer
             {
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                Padding = new Thickness(24, 20, 24, 20)
+                Padding = new Thickness(18, 12, 24, 18)
             };
             _pageHost = new ContentControl();
             scrollViewer.Content = _pageHost;
 
-            // Pre-build all 5 tab views
-            _tabViews["home"] = BuildHomeTab();
-            _tabViews["fastflags"] = BuildFastFlagsTab();
-            _tabViews["mods"] = BuildModsTab();
-            _tabViews["server"] = BuildServerTab();
-            _tabViews["system"] = BuildSystemTab();
+            // Build all pages
+            _pages["integrations"] = BuildIntegrationsPage();
+            _pages["bootstrapper"] = BuildBootstrapperPage();
+            _pages["mods"] = BuildModsPage();
+            _pages["engine"] = BuildEngineSettingsPage();
+            _pages["fflag_editor"] = BuildFastFlagEditorPage();
+            _pages["appearance"] = BuildAppearancePage();
+            _pages["shortcuts"] = BuildShortcutsPage();
+            _pages["nrblox"] = BuildNRBloxBehaviourPage();
+            _pages["about"] = BuildAboutPage();
 
-            Grid.SetRow(scrollViewer, 1);
-            mainGrid.Children.Add(scrollViewer);
+            Grid.SetColumn(scrollViewer, 1);
+            bodyGrid.Children.Add(scrollViewer);
+
+            Grid.SetRow(bodyGrid, 0);
+            rootGrid.Children.Add(bodyGrid);
 
             // =================================================================
-            // ROW 2: Bottom Status Bar
+            // ROW 1: Bottom Bar (Test mode toggle on left, Save & Close on right)
             // =================================================================
-            var footerBar = new Border
+            var bottomBar = new Border
             {
-                BorderThickness = new Thickness(0, 1, 0, 0),
-                Padding = new Thickness(22, 0, 22, 0)
+                Padding = new Thickness(18, 12, 18, 14)
             };
-            footerBar.SetResourceReference(Border.BackgroundProperty, "BgHeaderBrush");
-            footerBar.SetResourceReference(Border.BorderBrushProperty, "BorderSubtleBrush");
+            var bottomGrid = new Grid();
+            bottomGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            bottomGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            var footerGrid = new Grid();
-            footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var testModePanel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            var testToggle = NRBloxTheme.CreateToggleSwitch(_settings.TestMode, val => _settings.TestMode = val);
+            testToggle.Margin = new Thickness(0, 0, 10, 0);
+            testModePanel.Children.Add(testToggle);
+            var testLabel = NRBloxTheme.CreateText("Test mode", 13.5, FontWeights.Normal, "TextPrimaryBrush");
+            testLabel.VerticalAlignment = VerticalAlignment.Center;
+            testModePanel.Children.Add(testLabel);
 
-            _statusFooterText = NRBloxTheme.CreateText(
-                string.Format("Pronto • Alvo: {0} • {1} FastFlags sincronizadas", NRBloxPaths.TargetVersionGuid, _fastFlags.Flags.Count),
-                11.5, FontWeights.Medium, "TextSecondaryBrush"
-            );
-            _statusFooterText.VerticalAlignment = VerticalAlignment.Center;
-            Grid.SetColumn(_statusFooterText, 0);
-            footerGrid.Children.Add(_statusFooterText);
+            Grid.SetColumn(testModePanel, 0);
+            bottomGrid.Children.Add(testModePanel);
 
-            var wikiLinkBtn = new TextBlock
+            var actionButtons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            var saveBtn = NRBloxTheme.CreateStyledButton("Save", true, (s, e) => OnSaveClicked(), new Thickness(0, 0, 8, 0));
+            var closeBtn = NRBloxTheme.CreateStyledButton("Close", false, (s, e) => Close());
+            actionButtons.Children.Add(saveBtn);
+            actionButtons.Children.Add(closeBtn);
+
+            Grid.SetColumn(actionButtons, 1);
+            bottomGrid.Children.Add(actionButtons);
+
+            bottomBar.Child = bottomGrid;
+            Grid.SetRow(bottomBar, 1);
+            rootGrid.Children.Add(bottomBar);
+
+            Content = rootGrid;
+        }
+
+        private Border CreateSidebarNavItem(string key, string iconGlyph, string label)
+        {
+            var itemBorder = new Border
             {
-                Text = "📖 Documentação & Wiki Oficial (GitHub)  |  💬 Comunidade Discord",
-                FontSize = 11.5,
-                FontWeight = FontWeights.SemiBold,
-                Cursor = Cursors.Hand,
-                VerticalAlignment = VerticalAlignment.Center
+                CornerRadius = new CornerRadius(6),
+                BorderThickness = new Thickness(1),
+                BorderBrush = Brushes.Transparent,
+                Background = Brushes.Transparent,
+                Padding = new Thickness(0, 9, 12, 9),
+                Margin = new Thickness(0, 2, 0, 2),
+                Cursor = Cursors.Hand
             };
-            wikiLinkBtn.SetResourceReference(TextBlock.ForegroundProperty, "AccentPrimaryBrush");
-            wikiLinkBtn.MouseLeftButtonUp += (s, e) => OpenUrl(NRBloxPaths.GitHubWikiUrl);
-            Grid.SetColumn(wikiLinkBtn, 1);
-            footerGrid.Children.Add(wikiLinkBtn);
 
-            footerBar.Child = footerGrid;
-            Grid.SetRow(footerBar, 2);
-            mainGrid.Children.Add(footerBar);
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(28) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            outerShell.Child = mainGrid;
-            Content = outerShell;
-        }
-
-        private Button CreateNavPill(string tabKey, string label)
-        {
-            var btn = NRBloxTheme.CreateStyledButton(label, false, (s, e) => SwitchTab(tabKey), new Thickness(3, 0, 3, 0));
-            btn.Padding = new Thickness(14, 7, 14, 7);
-            _navButtons[tabKey] = btn;
-            return btn;
-        }
-
-        private Button CreateWindowCtrlBtn(string symbol, RoutedEventHandler onClick)
-        {
-            var btn = NRBloxTheme.CreateStyledButton(symbol, false, onClick, new Thickness(3, 0, 0, 0));
-            btn.Padding = new Thickness(10, 5, 10, 5);
-            return btn;
-        }
-
-        private void SwitchTab(string tabKey)
-        {
-            if (!_tabViews.ContainsKey(tabKey)) return;
-            _pageHost.Content = _tabViews[tabKey];
-
-            foreach (var kv in _navButtons)
+            var indicator = new Border
             {
-                kv.Value.Opacity = (kv.Key == tabKey) ? 1.0 : 0.68;
-                kv.Value.FontWeight = (kv.Key == tabKey) ? FontWeights.Bold : FontWeights.Medium;
+                Width = 3.5,
+                Height = 18,
+                CornerRadius = new CornerRadius(2),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center,
+                Visibility = Visibility.Hidden
+            };
+            indicator.SetResourceReference(Border.BackgroundProperty, "AccentPrimaryBrush");
+            Grid.SetColumn(indicator, 0);
+            grid.Children.Add(indicator);
+
+            var iconTb = NRBloxTheme.CreateText(iconGlyph, 14, FontWeights.Normal, "TextPrimaryBrush");
+            iconTb.HorizontalAlignment = HorizontalAlignment.Center;
+            iconTb.VerticalAlignment = VerticalAlignment.Center;
+            Grid.SetColumn(iconTb, 1);
+            grid.Children.Add(iconTb);
+
+            var labelTb = NRBloxTheme.CreateText(label, 13.5, FontWeights.Normal, "TextPrimaryBrush");
+            labelTb.VerticalAlignment = VerticalAlignment.Center;
+            Grid.SetColumn(labelTb, 2);
+            grid.Children.Add(labelTb);
+
+            itemBorder.Child = grid;
+            itemBorder.MouseLeftButtonUp += (s, e) => NavigateTo(key);
+
+            _navItems[key] = itemBorder;
+            _navIndicators[key] = indicator;
+            return itemBorder;
+        }
+
+        public void NavigateTo(string key)
+        {
+            if (!_pages.ContainsKey(key)) return;
+            _pageHost.Content = _pages[key];
+
+            string activeNavKey = (key == "fflag_editor") ? "engine" : key;
+            foreach (var kv in _navItems)
+            {
+                bool isSel = (kv.Key == activeNavKey);
+                if (isSel)
+                {
+                    kv.Value.SetResourceReference(Border.BackgroundProperty, "NavSelectedBgBrush");
+                    kv.Value.SetResourceReference(Border.BorderBrushProperty, "BorderSubtleBrush");
+                    _navIndicators[kv.Key].Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    kv.Value.Background = Brushes.Transparent;
+                    kv.Value.BorderBrush = Brushes.Transparent;
+                    _navIndicators[kv.Key].Visibility = Visibility.Hidden;
+                }
             }
         }
 
-        private void ToggleTheme()
-        {
-            bool nextDark = !NRBloxTheme.IsDark;
-            _settings.ThemeMode = nextDark ? "Dark" : "Light";
-            NRBloxTheme.ApplyTheme(Resources, nextDark);
-            _themeToggleBtn.Content = nextDark ? "☀️ Modo Claro" : "🌙 Modo Escuro";
-            SaveAllSettings("Tema alterado para " + (nextDark ? "Modo Escuro" : "Modo Claro"));
-        }
-
-        private void SaveAllSettings(string statusMsg = null)
+        private void OnSaveClicked()
         {
             JsonHelper.Save(NRBloxPaths.SettingsFile, _settings);
             _fastFlags.ApplySettingsToFlags();
             _fastFlags.SaveAndSync();
             _mods.ApplyAndSyncMods();
 
-            if (_flagCountMetric != null)
-                _flagCountMetric.Text = _fastFlags.Flags.Count.ToString();
-            if (_fpsMetric != null)
-                _fpsMetric.Text = _settings.TargetFps > 0 ? (_settings.TargetFps + " FPS") : "Padrão";
-            if (_statusFooterText != null && !string.IsNullOrEmpty(statusMsg))
-                _statusFooterText.Text = statusMsg + " • Sincronizado com " + NRBloxPaths.TargetVersionGuid;
+            if (_settings.ShortcutDesktopIcon)
+                SystemIntegrationService.CreateDesktopShortcuts();
+
+            if (_settings.TestMode)
+            {
+                var boot = new NRBloxBootstrapperWindow(_settings, _fastFlags, _mods, null, false, false);
+                boot.ShowDialog();
+            }
+            else
+            {
+                Close();
+            }
+        }
+
+        private static StackPanel CreatePageHeader(string title, string subtitle)
+        {
+            var stack = new StackPanel { Margin = new Thickness(0, 0, 0, 18) };
+            stack.Children.Add(NRBloxTheme.CreateText(title, 26, FontWeights.SemiBold, "TextPrimaryBrush"));
+            if (!string.IsNullOrEmpty(subtitle))
+                stack.Children.Add(NRBloxTheme.CreateText(subtitle, 13.5, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 4, 0, 0)));
+            return stack;
+        }
+
+        private static TextBlock CreateSectionHeader(string title, string subtitle = null)
+        {
+            var tb = NRBloxTheme.CreateText(title, 18, FontWeights.SemiBold, "TextPrimaryBrush", new Thickness(0, 14, 0, subtitle == null ? 10 : 2));
+            return tb;
         }
 
         // =====================================================================
-        // TAB 1: INÍCIO (Bento Dashboard & Launchpad)
+        // PAGE 1: INTEGRATIONS (Screenshots 2, 3, 4)
         // =====================================================================
-        private UIElement BuildHomeTab()
+        private UIElement BuildIntegrationsPage()
         {
             var root = new StackPanel();
+            root.Children.Add(CreatePageHeader("Integrations", "Configure additional functionality to go alongside Roblox."));
 
-            // Hero Launch Card
-            var heroCard = NRBloxTheme.CreateBentoCard(new Thickness(0, 0, 0, 16), new Thickness(24, 22, 24, 22));
-            heroCard.SetResourceReference(Border.BorderBrushProperty, "BorderAccentBrush");
-
-            var heroGrid = new Grid();
-            heroGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            heroGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            var heroLeft = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            heroLeft.Children.Add(NRBloxTheme.CreateText("Central de Controle NRBlox (Windows)", 22, FontWeights.ExtraBold, "TextPrimaryBrush"));
-            heroLeft.Children.Add(NRBloxTheme.CreateText(
-                "Launcher nativo em WPF para Windows com controle total de FastFlags, Mods, Multi-Instância, Geolocalização de Servidores e Discord Rich Presence.",
-                13, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 6, 0, 14)
-            ));
-
-            var heroBtns = new StackPanel { Orientation = Orientation.Horizontal };
-            heroBtns.Children.Add(NRBloxTheme.CreateStyledButton("▶ Iniciar Roblox Player", true, (s, e) => LaunchRoblox(false, null), new Thickness(0, 0, 10, 0)));
-            heroBtns.Children.Add(NRBloxTheme.CreateStyledButton("🛠️ Iniciar Roblox Studio", false, (s, e) => LaunchRoblox(true, null), new Thickness(0, 0, 10, 0)));
-            heroBtns.Children.Add(NRBloxTheme.CreateStyledButton("💬 Comunidade Discord", false, (s, e) => OpenUrl(NRBloxPaths.DiscordUrl), new Thickness(0, 0, 10, 0)));
-            heroBtns.Children.Add(NRBloxTheme.CreateStyledButton("📖 Abrir Wiki", false, (s, e) => OpenUrl(NRBloxPaths.GitHubWikiUrl)));
-            heroLeft.Children.Add(heroBtns);
-
-            Grid.SetColumn(heroLeft, 0);
-            heroGrid.Children.Add(heroLeft);
-            heroCard.Child = heroGrid;
-            root.Children.Add(heroCard);
-
-            // 3 Metric Bento Cards
-            var metricsGrid = new UniformGrid { Columns = 3, Margin = new Thickness(0, 0, 0, 16) };
-
-            var cardFps = NRBloxTheme.CreateBentoCard(new Thickness(0, 0, 8, 0), new Thickness(18, 16, 18, 16));
-            var stackFps = new StackPanel();
-            stackFps.Children.Add(NRBloxTheme.CreateText("TAXA DE QUADROS ALVO", 11, FontWeights.Bold, "TextSecondaryBrush"));
-            _fpsMetric = NRBloxTheme.CreateText(_settings.TargetFps > 0 ? (_settings.TargetFps + " FPS") : "Padrão", 24, FontWeights.ExtraBold, "AccentPrimaryBrush", new Thickness(0, 4, 0, 2));
-            stackFps.Children.Add(_fpsMetric);
-            stackFps.Children.Add(NRBloxTheme.CreateText("API: " + _settings.RenderingMode + " • MSAA: " + _settings.MsaaMode + "x", 12, FontWeights.Normal, "TextSecondaryBrush"));
-            cardFps.Child = stackFps;
-            metricsGrid.Children.Add(cardFps);
-
-            var cardFlags = NRBloxTheme.CreateBentoCard(new Thickness(4, 0, 4, 0), new Thickness(18, 16, 18, 16));
-            var stackFlags = new StackPanel();
-            stackFlags.Children.Add(NRBloxTheme.CreateText("FASTFLAGS ATIVAS", 11, FontWeights.Bold, "TextSecondaryBrush"));
-            _flagCountMetric = NRBloxTheme.CreateText(_fastFlags.Flags.Count.ToString(), 24, FontWeights.ExtraBold, "SuccessBrush", new Thickness(0, 4, 0, 2));
-            stackFlags.Children.Add(_flagCountMetric);
-            stackFlags.Children.Add(NRBloxTheme.CreateText("Sincronizadas em ClientAppSettings.json", 12, FontWeights.Normal, "TextSecondaryBrush"));
-            cardFlags.Child = stackFlags;
-            metricsGrid.Children.Add(cardFlags);
-
-            var cardVer = NRBloxTheme.CreateBentoCard(new Thickness(8, 0, 0, 0), new Thickness(18, 16, 18, 16));
-            var stackVer = new StackPanel();
-            stackVer.Children.Add(NRBloxTheme.CreateText("CLIENTE MONITORADO", 11, FontWeights.Bold, "TextSecondaryBrush"));
-            stackVer.Children.Add(NRBloxTheme.CreateText(NRBloxPaths.TargetVersionGuid, 17, FontWeights.ExtraBold, "TextPrimaryBrush", new Thickness(0, 6, 0, 4)));
-            stackVer.Children.Add(NRBloxTheme.CreateText("Canal: " + _settings.Channel, 12, FontWeights.Normal, "TextSecondaryBrush"));
-            cardVer.Child = stackVer;
-            metricsGrid.Children.Add(cardVer);
-
-            root.Children.Add(metricsGrid);
-
-            // Quick Behaviour Settings
-            root.Children.Add(NRBloxTheme.CreateText("Configurações Rápidas do Bootstrapper", 16, FontWeights.Bold, "TextPrimaryBrush", new Thickness(0, 4, 0, 10)));
+            root.Children.Add(CreateSectionHeader("Activity tracking"));
 
             root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Permitir Múltiplas Instâncias (Multi-Instance Launching)",
-                "Mantém o mutex ROBLOX_singletonMutex ativo para permitir abrir várias contas/janelas do Roblox simultaneamente no Windows.",
-                NRBloxTheme.CreateToggleSwitch(_settings.MultiInstanceLaunching, val =>
+                "Enable activity tracking",
+                "Allows for NRBlox to detect what Roblox game you're playing. Certain features may require this.",
+                NRBloxTheme.CreateToggleSwitch(_settings.EnableActivityTracking, v => _settings.EnableActivityTracking = v)
+            ));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Query server location",
+                "When in-game, you'll be able to see where your server is located via ipinfo.io.",
+                NRBloxTheme.CreateToggleSwitch(_settings.QueryServerLocation, v => _settings.QueryServerLocation = v)
+            ));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Don't exit to desktop app",
+                "Roblox will fully close when you leave a game instead of going back to the app.",
+                NRBloxTheme.CreateToggleSwitch(_settings.DisableDesktopAppPatch, v => _settings.DisableDesktopAppPatch = v)
+            ));
+
+            // Discord Rich Presence
+            root.Children.Add(CreateSectionHeader("Discord Rich Presence", "This feature requires activity tracking to be enabled and the Discord desktop app to be installed and running."));
+            root.Children.Add(NRBloxTheme.CreateText(
+                "This feature requires activity tracking to be enabled and the Discord desktop app to be installed and running.",
+                12.5, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 0, 0, 10)
+            ));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Show game activity",
+                "The Roblox game you're playing will be shown on your Discord profile.",
+                NRBloxTheme.CreateToggleSwitch(_settings.EnableDiscordRichPresence, v => _settings.EnableDiscordRichPresence = v)
+            ));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Allow activity joining",
+                "Allows for anybody to join the game you're currently in through your Discord profile.",
+                NRBloxTheme.CreateToggleSwitch(_settings.AllowActivityJoining, v => _settings.AllowActivityJoining = v)
+            ));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Show Roblox account",
+                "Shows the Roblox account you're playing with on your Discord profile.",
+                NRBloxTheme.CreateToggleSwitch(_settings.ShowAccountOnRichPresence, v => _settings.ShowAccountOnRichPresence = v)
+            ));
+
+            // Custom Integrations (Master-Detail layout matching Screenshot 4)
+            root.Children.Add(CreateSectionHeader("Custom Integrations", "Here, you can have other programs launch with Roblox automatically."));
+            root.Children.Add(NRBloxTheme.CreateText(
+                "Here, you can have other programs launch with Roblox automatically.",
+                12.5, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 0, 0, 10)
+            ));
+
+            var ciGrid = new Grid { Margin = new Thickness(0, 0, 0, 10) };
+            ciGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(250) });
+            ciGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            var leftStack = new StackPanel();
+            _customIntListBox = new ListBox
+            {
+                Height = 175,
+                Margin = new Thickness(0, 0, 0, 8),
+                FontSize = 13
+            };
+            _customIntListBox.SetResourceReference(Control.BackgroundProperty, "BgCardBrush");
+            _customIntListBox.SetResourceReference(Control.BorderBrushProperty, "BorderSubtleBrush");
+            _customIntListBox.SetResourceReference(Control.ForegroundProperty, "TextPrimaryBrush");
+
+            if (_settings.CustomIntegrationItems != null)
+            {
+                foreach (var item in _settings.CustomIntegrationItems)
+                    _customIntListBox.Items.Add(item);
+            }
+            _customIntListBox.SelectionChanged += (s, e) => RenderCustomIntegrationDetail();
+            leftStack.Children.Add(_customIntListBox);
+
+            var ciButtonsGrid = new UniformGrid { Columns = 2 };
+            var newBtn = NRBloxTheme.CreateStyledButton("＋ New", false, (s, e) =>
+            {
+                if (_settings.CustomIntegrationItems == null)
+                    _settings.CustomIntegrationItems = new List<CustomIntegrationItem>();
+                var item = new CustomIntegrationItem { Name = "New Integration" };
+                _settings.CustomIntegrationItems.Add(item);
+                _customIntListBox.Items.Add(item);
+                _customIntListBox.SelectedItem = item;
+            }, new Thickness(0, 0, 4, 0));
+
+            var delBtn = NRBloxTheme.CreateStyledButton("🗑 Delete", false, (s, e) =>
+            {
+                var sel = _customIntListBox.SelectedItem as CustomIntegrationItem;
+                if (sel != null)
                 {
-                    _settings.MultiInstanceLaunching = val;
-                    SystemIntegrationService.SetMultiInstanceMutex(val);
-                    SaveAllSettings("Multi-Instância " + (val ? "ativada" : "desativada"));
-                })
-            ));
+                    _settings.CustomIntegrationItems.Remove(sel);
+                    _customIntListBox.Items.Remove(sel);
+                    RenderCustomIntegrationDetail();
+                }
+            }, new Thickness(4, 0, 0, 0));
 
-            root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Estilo Visual da Janela de Inicialização (Bootstrapper)",
-                "Define o visual da janela exibida ao iniciar o Roblox pelo navegador ou atalho.",
-                NRBloxTheme.CreateStyledComboBox(
-                    new string[] { "NRBlox Cyber Glass", "Minimal Pulse", "Neon Void", "Classic Retro" },
-                    _settings.BootstrapperStyle,
-                    val => { _settings.BootstrapperStyle = val; SaveAllSettings("Estilo do Bootstrapper atualizado"); }
-                )
-            ));
+            ciButtonsGrid.Children.Add(newBtn);
+            ciButtonsGrid.Children.Add(delBtn);
+            leftStack.Children.Add(ciButtonsGrid);
 
-            root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Canal de Distribuição do Cliente (Deployment Channel)",
-                "Selecione o canal oficial do cliente Roblox monitorado pelo NRBlox.",
-                NRBloxTheme.CreateStyledComboBox(
-                    new string[] { "production", "zflag", "zintegration", "zcanary" },
-                    _settings.Channel,
-                    val => { _settings.Channel = val; SaveAllSettings("Canal atualizado para " + val); }
-                )
-            ));
+            Grid.SetColumn(leftStack, 0);
+            ciGrid.Children.Add(leftStack);
 
-            root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Travar Versão Local (version-11f155f3450f4c8e)",
-                "Preserva as customizações e impede que o lançador padrão sobrescreva os arquivos locais.",
-                NRBloxTheme.CreateToggleSwitch(_settings.LockRobloxVersion, val =>
+            _customIntDetailHost = new ContentControl { Margin = new Thickness(16, 0, 0, 0) };
+            RenderCustomIntegrationDetail();
+            Grid.SetColumn(_customIntDetailHost, 1);
+            ciGrid.Children.Add(_customIntDetailHost);
+
+            root.Children.Add(ciGrid);
+            return root;
+        }
+
+        private void RenderCustomIntegrationDetail()
+        {
+            if (_customIntDetailHost == null) return;
+            var sel = _customIntListBox != null ? (_customIntListBox.SelectedItem as CustomIntegrationItem) : null;
+
+            if (sel == null)
+            {
+                var emptyText = NRBloxTheme.CreateText("No integration selected, please select or add a new one", 13, FontWeights.Normal, "TextSecondaryBrush");
+                emptyText.HorizontalAlignment = HorizontalAlignment.Center;
+                emptyText.VerticalAlignment = VerticalAlignment.Center;
+                _customIntDetailHost.Content = emptyText;
+                return;
+            }
+
+            var detailCard = NRBloxTheme.CreateCard(new Thickness(0), new Thickness(16));
+            var stack = new StackPanel();
+
+            stack.Children.Add(NRBloxTheme.CreateText("Name", 12.5, FontWeights.SemiBold, "TextPrimaryBrush", new Thickness(0, 0, 0, 4)));
+            var nameBox = new TextBox { Text = sel.Name, Padding = new Thickness(8, 6, 8, 6), Margin = new Thickness(0, 0, 0, 10) };
+            nameBox.TextChanged += (s, e) => { sel.Name = nameBox.Text; _customIntListBox.Items.Refresh(); };
+            stack.Children.Add(nameBox);
+
+            stack.Children.Add(NRBloxTheme.CreateText("Application Location", 12.5, FontWeights.SemiBold, "TextPrimaryBrush", new Thickness(0, 0, 0, 4)));
+            var locGrid = new Grid { Margin = new Thickness(0, 0, 0, 10) };
+            locGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            locGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var locBox = new TextBox { Text = sel.Location, Padding = new Thickness(8, 6, 8, 6), Margin = new Thickness(0, 0, 8, 0) };
+            locBox.TextChanged += (s, e) => sel.Location = locBox.Text;
+            Grid.SetColumn(locBox, 0);
+            locGrid.Children.Add(locBox);
+
+            var browseBtn = NRBloxTheme.CreateStyledButton("📁 Browse", false, (s, e) =>
+            {
+                var dlg = new OpenFileDialog { Filter = "Executables (*.exe)|*.exe|All files (*.*)|*.*" };
+                if (dlg.ShowDialog() == true)
                 {
-                    _settings.LockRobloxVersion = val;
-                    SaveAllSettings("Trava de versão atualizada");
+                    locBox.Text = dlg.FileName;
+                    if (sel.Name == "New Integration")
+                    {
+                        nameBox.Text = Path.GetFileNameWithoutExtension(dlg.FileName);
+                    }
+                }
+            });
+            Grid.SetColumn(browseBtn, 1);
+            locGrid.Children.Add(browseBtn);
+            stack.Children.Add(locGrid);
+
+            stack.Children.Add(NRBloxTheme.CreateText("Launch Arguments", 12.5, FontWeights.SemiBold, "TextPrimaryBrush", new Thickness(0, 0, 0, 4)));
+            var argsBox = new TextBox { Text = sel.LaunchArgs, Padding = new Thickness(8, 6, 8, 6) };
+            argsBox.TextChanged += (s, e) => sel.LaunchArgs = argsBox.Text;
+            stack.Children.Add(argsBox);
+
+            detailCard.Child = stack;
+            _customIntDetailHost.Content = detailCard;
+        }
+
+        // =====================================================================
+        // PAGE 2: BOOTSTRAPPER (Screenshot 5 + NRBlox Multi-Instance)
+        // =====================================================================
+        private UIElement BuildBootstrapperPage()
+        {
+            var root = new StackPanel();
+            root.Children.Add(CreatePageHeader("Bootstrapper", "Configure what NRBlox should do when launching Roblox."));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Prompt to confirm when launching another Roblox instance",
+                "Prevent against closures of your existing game from accidentally launching another one.",
+                NRBloxTheme.CreateToggleSwitch(_settings.ConfirmLaunches, v => _settings.ConfirmLaunches = v)
+            ));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Background updates",
+                "Update Roblox in the background instead of blocking launch when an update is available. At least 5GB of free storage space is required for this feature.",
+                NRBloxTheme.CreateToggleSwitch(_settings.BackgroundUpdates, v => _settings.BackgroundUpdates = v)
+            ));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Force Roblox reinstallation",
+                "Roblox will be installed fresh on next launch.",
+                NRBloxTheme.CreateToggleSwitch(_settings.ForceRobloxReinstall, v => _settings.ForceRobloxReinstall = v)
+            ));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Allow multiple Roblox instances (Multi-Instance)",
+                "Holds ROBLOX_singletonMutex so you can run multiple Roblox game windows simultaneously.",
+                NRBloxTheme.CreateToggleSwitch(_settings.MultiInstanceLaunching, v =>
+                {
+                    _settings.MultiInstanceLaunching = v;
+                    SystemIntegrationService.SetMultiInstanceMutex(v);
                 })
             ));
 
@@ -418,618 +488,628 @@ namespace NRBlox.Windows.UI
         }
 
         // =====================================================================
-        // TAB 2: FASTFLAGS & ENGINE STUDIO
+        // PAGE 3: MODS (Screenshots 6 & 7)
         // =====================================================================
-        private UIElement BuildFastFlagsTab()
+        private UIElement BuildModsPage()
         {
             var root = new StackPanel();
+            root.Children.Add(CreatePageHeader("Mods", "Manage and apply file mods to the Roblox game client."));
 
-            root.Children.Add(NRBloxTheme.CreateText("Motor Gráfico & Presets de FastFlags", 18, FontWeights.ExtraBold, "TextPrimaryBrush", new Thickness(0, 0, 0, 4)));
-            root.Children.Add(NRBloxTheme.CreateText(
-                "Todas as alterações abaixo são gravadas instantaneamente em ClientSettings\\ClientAppSettings.json na pasta da versão ativa.",
-                12.5, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 0, 0, 14)
+            // Top 2-column cards: Open Mods Folder | Help
+            var topGrid = new UniformGrid { Columns = 2, Margin = new Thickness(0, 0, 0, 10) };
+            topGrid.Children.Add(NRBloxTheme.CreateActionCard(
+                "📁",
+                "Open Mods Folder",
+                "Manage custom Roblox mods here.",
+                () => OpenFolder(NRBloxPaths.ModificationsDir),
+                new Thickness(0, 0, 5, 0)
+            ));
+            topGrid.Children.Add(NRBloxTheme.CreateActionCard(
+                "📓",
+                "Help",
+                "See info about managing and creating mods.",
+                () => OpenUrl(NRBloxPaths.GitHubWikiUrl),
+                new Thickness(5, 0, 0, 0)
+            ));
+            root.Children.Add(topGrid);
+
+            root.Children.Add(NRBloxTheme.CreateActionCard(
+                "🛠️",
+                "Manage compatibility settings",
+                "Configure application parameters such as DPI scaling behaviour and fullscreen optimizations.",
+                () => OpenCompatibilityProperties(),
+                new Thickness(0, 0, 0, 10)
+            ));
+
+            root.Children.Add(CreateSectionHeader("Presets"));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Mouse cursor",
+                "Choose between using two classic Roblox cursor styles.",
+                NRBloxTheme.CreateStyledComboBox(
+                    new string[] { "Default", "From 2006 (Cartoon)", "From 2013 (Angular)" },
+                    _settings.CursorType,
+                    v => _settings.CursorType = v
+                )
             ));
 
             root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Gerenciador de FastFlags Ativo",
-                "Habilita a injeção automática do arquivo ClientAppSettings.json no cliente Roblox.",
-                NRBloxTheme.CreateToggleSwitch(_settings.UseFastFlagManager, val =>
+                "Use old avatar editor background",
+                "Bring back the old avatar editor background used in the Roblox app prior to 2020.",
+                NRBloxTheme.CreateToggleSwitch(_settings.UseOldAvatarBackground, v => _settings.UseOldAvatarBackground = v)
+            ));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Emulate old character sounds",
+                "An attempt to roughly bring back the character sounds used prior to 2014.",
+                NRBloxTheme.CreateToggleSwitch(_settings.UseOldCharacterSounds, v => _settings.UseOldCharacterSounds = v)
+            ));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Preferred emoji type",
+                "Choose which type of emoji should Roblox use.",
+                NRBloxTheme.CreateStyledComboBox(
+                    new string[] { "Default (Twemoji)", "Catmoji", "Windows 11", "Windows 10", "Windows 8.1" },
+                    _settings.PreferredEmojiType,
+                    v => _settings.PreferredEmojiType = v
+                )
+            ));
+
+            root.Children.Add(CreateSectionHeader("Miscellaneous"));
+
+            var chooseFontBtn = NRBloxTheme.CreateStyledButton(
+                string.IsNullOrEmpty(_settings.CustomFontPath) ? "🔤 Choose font..." : "🗑 Remove custom font",
+                false,
+                null
+            );
+            chooseFontBtn.Click += (s, e) =>
+            {
+                if (!string.IsNullOrEmpty(_settings.CustomFontPath))
                 {
-                    _settings.UseFastFlagManager = val;
-                    SaveAllSettings("Gerenciador de FastFlags " + (val ? "ativado" : "desativado"));
-                    RefreshFlagListUi();
-                })
+                    _settings.CustomFontPath = "";
+                    chooseFontBtn.Content = "🔤 Choose font...";
+                    return;
+                }
+                var dlg = new OpenFileDialog
+                {
+                    Title = "Select Custom Font",
+                    Filter = "Font files (*.ttf;*.otf)|*.ttf;*.otf"
+                };
+                if (dlg.ShowDialog() == true)
+                {
+                    _settings.CustomFontPath = dlg.FileName;
+                    chooseFontBtn.Content = "🗑 Remove custom font (" + Path.GetFileName(dlg.FileName) + ")";
+                }
+            };
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Use custom font",
+                null,
+                chooseFontBtn
+            ));
+
+            return root;
+        }
+
+        // =====================================================================
+        // PAGE 4: ENGINE SETTINGS (Screenshots 8 & 9 + Extra NRBlox Presets)
+        // =====================================================================
+        private UIElement BuildEngineSettingsPage()
+        {
+            var root = new StackPanel();
+            root.Children.Add(CreatePageHeader("Engine Settings", "Control how specific Roblox engine parameters and features are configured."));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Allow NRBlox to manage Fast Flags",
+                "Disabling this will prevent anything configured here from being applied to Roblox.",
+                NRBloxTheme.CreateToggleSwitch(_settings.UseFastFlagManager, v => _settings.UseFastFlagManager = v)
+            ));
+
+            root.Children.Add(CreateSectionHeader("Presets"));
+            root.Children.Add(NRBloxTheme.CreateText("Rendering and Graphics", 14.5, FontWeights.SemiBold, "TextPrimaryBrush", new Thickness(0, 0, 0, 2)));
+            root.Children.Add(NRBloxTheme.CreateText("Direct3D exclusive fullscreen using Alt+Enter is enabled by default.", 12, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 0, 0, 10)));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Anti-aliasing quality (MSAA)",
+                null,
+                NRBloxTheme.CreateStyledComboBox(
+                    new string[] { "Automatic", "1x", "2x", "4x" },
+                    _settings.MsaaMode,
+                    v => _settings.MsaaMode = v
+                )
             ));
 
             root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Desbloqueador de FPS (DFIntTaskSchedulerTargetFps)",
-                "Define o limite máximo de quadros por segundo do agendador de tarefas do motor.",
+                "Preserve rendering quality with display scaling",
+                "Roblox reduces your rendering quality depending on how your display is scaled in Windows.",
+                NRBloxTheme.CreateToggleSwitch(_settings.DisableDpiScale, v => _settings.DisableDpiScale = v)
+            ));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Texture quality",
+                null,
+                NRBloxTheme.CreateStyledComboBox(
+                    new string[] { "Automatic", "Level 0 (Lowest)", "Level 1 (Low)", "Level 2 (Medium)", "Level 3 (Highest)" },
+                    _settings.TextureQuality,
+                    v => _settings.TextureQuality = v
+                )
+            ));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Framerate limit (FPS Unlocker)",
+                "Set the target framerate limit for the Roblox task scheduler.",
                 NRBloxTheme.CreateStyledComboBox(
                     new string[] { "60", "120", "144", "165", "240", "360", "999", "0" },
                     _settings.TargetFps.ToString(),
-                    val =>
+                    v =>
                     {
-                        int parsed;
-                        if (int.TryParse(val, out parsed)) _settings.TargetFps = parsed;
-                        SaveAllSettings("Limite de FPS ajustado para " + val);
-                        RefreshFlagListUi();
+                        int fps;
+                        if (int.TryParse(v, out fps)) _settings.TargetFps = fps;
                     }
                 )
             ));
 
             root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "API de Renderização Gráfica",
-                "Escolhe o backend gráfico utilizado pelo RobloxPlayerBeta.exe no Windows.",
+                "Rendering mode (Graphics API)",
+                "Choose the graphics API used by the Roblox engine.",
                 NRBloxTheme.CreateStyledComboBox(
-                    new string[] { "D3D11", "D3D10", "Vulkan", "OpenGL", "Automático" },
+                    new string[] { "Automatic", "Direct3D 11", "Direct3D 10", "Vulkan", "OpenGL" },
                     _settings.RenderingMode,
-                    val =>
-                    {
-                        _settings.RenderingMode = val;
-                        SaveAllSettings("API de renderização alterada para " + val);
-                        RefreshFlagListUi();
-                    }
+                    v => _settings.RenderingMode = v
                 )
             ));
 
             root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Tecnologia de Iluminação Forçada",
-                "Substitui o modo de iluminação do cenário (Voxel Fase 1, ShadowMap Fase 2 ou Future Is Bright Fase 3).",
+                "Preferred lighting technology",
+                "Force a specific lighting phase across games.",
                 NRBloxTheme.CreateStyledComboBox(
-                    new string[] { "Padrão", "Voxel", "ShadowMap", "Future" },
+                    new string[] { "Chosen by game", "Voxel (Phase 1)", "Shadow Map (Phase 2)", "Future (Phase 3)" },
                     _settings.LightingMode,
-                    val =>
-                    {
-                        _settings.LightingMode = val;
-                        SaveAllSettings("Tecnologia de iluminação alterada para " + val);
-                        RefreshFlagListUi();
-                    }
+                    v => _settings.LightingMode = v
                 )
             ));
 
             root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Suavização de Serrilhado (MSAA)",
-                "Força o nível de Multisample Anti-Aliasing (FIntDebugForceMSAASamples).",
-                NRBloxTheme.CreateStyledComboBox(
-                    new string[] { "Automático", "1", "2", "4", "8" },
-                    _settings.MsaaMode,
-                    val =>
-                    {
-                        _settings.MsaaMode = val;
-                        SaveAllSettings("MSAA ajustado para " + val);
-                        RefreshFlagListUi();
-                    }
-                )
+                "Reset everything to defaults",
+                null,
+                NRBloxTheme.CreateToggleSwitch(_settings.ResetEverythingToDefaults, v => _settings.ResetEverythingToDefaults = v),
+                new Thickness(0, 12, 0, 10)
             ));
 
-            root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Qualidade de Texturas (DFIntTextureQualityOverride)",
-                "Força a resolução de texturas (3 = Ultra, 2 = Alta, 1 = Média, 0 = Baixa).",
-                NRBloxTheme.CreateStyledComboBox(
-                    new string[] { "Automático", "0", "1", "2", "3" },
-                    _settings.TextureQuality,
-                    val =>
-                    {
-                        _settings.TextureQuality = val;
-                        SaveAllSettings("Qualidade de textura ajustada para " + val);
-                        RefreshFlagListUi();
-                    }
-                )
-            ));
-
-            root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Desativar Escalonamento de DPI do Windows (DFFlagDisableDPIScale)",
-                "Evita que o cliente fique borrado em monitores com escala de 125% ou 150%.",
-                NRBloxTheme.CreateToggleSwitch(_settings.DisableDpiScale, val =>
+            root.Children.Add(NRBloxTheme.CreateActionCard(
+                "✏️",
+                "Fast Flag Editor",
+                "Manage your own Fast Flags. Use with caution.",
+                () =>
                 {
-                    _settings.DisableDpiScale = val;
-                    SaveAllSettings("Escalonamento de DPI atualizado");
-                    RefreshFlagListUi();
-                })
+                    RefreshFastFlagEditorRows();
+                    NavigateTo("fflag_editor");
+                },
+                new Thickness(0, 0, 0, 10)
             ));
 
-            root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Tela Cheia Exclusiva com Alt+Enter (FFlagHandleAltEnterFullscreenManually)",
-                "Melhora a latência de quadros ao alternar para tela cheia.",
-                NRBloxTheme.CreateToggleSwitch(_settings.ManualFullscreen, val =>
-                {
-                    _settings.ManualFullscreen = val;
-                    SaveAllSettings("Modo Alt+Enter atualizado");
-                    RefreshFlagListUi();
-                })
-            ));
+            return root;
+        }
 
-            root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Bloquear Telemetria e Contadores Efêmeros",
-                "Desativa o envio de métricas internas de telemetria do cliente.",
-                NRBloxTheme.CreateToggleSwitch(_settings.DisableTelemetry, val =>
-                {
-                    _settings.DisableTelemetry = val;
-                    SaveAllSettings("Bloqueio de telemetria atualizado");
-                    RefreshFlagListUi();
-                })
-            ));
+        // =====================================================================
+        // SUB-PAGE: FAST FLAG EDITOR
+        // =====================================================================
+        private UIElement BuildFastFlagEditorPage()
+        {
+            var root = new StackPanel();
 
-            // Custom FastFlag Add Bar + Raw JSON Editor
-            var editorCard = NRBloxTheme.CreateBentoCard(new Thickness(0, 12, 0, 12), new Thickness(18, 16, 18, 16));
-            var editorStack = new StackPanel();
-            editorStack.Children.Add(NRBloxTheme.CreateText("Editor Avançado de FastFlags (ClientAppSettings.json)", 15, FontWeights.Bold, "TextPrimaryBrush", new Thickness(0, 0, 0, 10)));
+            var topRow = new Grid { Margin = new Thickness(0, 0, 0, 14) };
+            topRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            topRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            var addGrid = new Grid { Margin = new Thickness(0, 0, 0, 12) };
+            var titleStack = new StackPanel();
+            titleStack.Children.Add(NRBloxTheme.CreateText("Fast Flag Editor", 24, FontWeights.SemiBold, "TextPrimaryBrush"));
+            titleStack.Children.Add(NRBloxTheme.CreateText("Manage your own Fast Flags in ClientAppSettings.json.", 13, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 3, 0, 0)));
+            Grid.SetColumn(titleStack, 0);
+            topRow.Children.Add(titleStack);
+
+            var backBtn = NRBloxTheme.CreateStyledButton("← Back to Engine Settings", false, (s, e) => NavigateTo("engine"));
+            backBtn.VerticalAlignment = VerticalAlignment.Center;
+            Grid.SetColumn(backBtn, 1);
+            topRow.Children.Add(backBtn);
+            root.Children.Add(topRow);
+
+            // Add Bar
+            var addCard = NRBloxTheme.CreateCard(new Thickness(0, 0, 0, 12), new Thickness(14));
+            var addGrid = new Grid();
             addGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
             addGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             addGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            addGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            var flagNameBox = new TextBox
+            var nameBox = new TextBox { Text = "FFlagDebugDisplayFPS", Padding = new Thickness(8, 6, 8, 6), Margin = new Thickness(0, 0, 8, 0) };
+            var valBox = new TextBox { Text = "True", Padding = new Thickness(8, 6, 8, 6), Margin = new Thickness(0, 0, 8, 0) };
+            var addBtn = NRBloxTheme.CreateStyledButton("＋ Add New", true, (s, e) =>
             {
-                Padding = new Thickness(10, 7, 10, 7),
-                Margin = new Thickness(0, 0, 8, 0),
-                FontSize = 13,
-                Text = "FFlagDebugDisplayFPS"
-            };
-            var flagValBox = new TextBox
-            {
-                Padding = new Thickness(10, 7, 10, 7),
-                Margin = new Thickness(0, 0, 8, 0),
-                FontSize = 13,
-                Text = "True"
-            };
-
-            Grid.SetColumn(flagNameBox, 0);
-            Grid.SetColumn(flagValBox, 1);
-            addGrid.Children.Add(flagNameBox);
-            addGrid.Children.Add(flagValBox);
-
-            var addBtn = NRBloxTheme.CreateStyledButton("+ Adicionar / Atualizar Flag", true, (s, e) =>
-            {
-                string k = (flagNameBox.Text ?? "").Trim();
-                string v = (flagValBox.Text ?? "").Trim();
+                string k = (nameBox.Text ?? "").Trim();
+                string v = (valBox.Text ?? "").Trim();
                 if (!string.IsNullOrEmpty(k))
                 {
                     _fastFlags.SetOrRemove(k, v);
                     _fastFlags.SaveAndSync();
-                    RefreshFlagListUi();
-                    SaveAllSettings("FastFlag " + k + " gravada");
+                    RefreshFastFlagEditorRows();
                 }
-            }, new Thickness(0, 0, 8, 0));
-            Grid.SetColumn(addBtn, 2);
-            addGrid.Children.Add(addBtn);
-
-            var openJsonBtn = NRBloxTheme.CreateStyledButton("📄 Abrir ClientAppSettings.json", false, (s, e) =>
-            {
-                string file = Path.Combine(NRBloxPaths.GetRobloxVersionDir(), "ClientSettings", "ClientAppSettings.json");
-                if (File.Exists(file))
-                    Process.Start(new ProcessStartInfo { FileName = "notepad.exe", Arguments = "\"" + file + "\"", UseShellExecute = true });
             });
-            Grid.SetColumn(openJsonBtn, 3);
-            addGrid.Children.Add(openJsonBtn);
 
-            editorStack.Children.Add(addGrid);
+            Grid.SetColumn(nameBox, 0);
+            Grid.SetColumn(valBox, 1);
+            Grid.SetColumn(addBtn, 2);
+            addGrid.Children.Add(nameBox);
+            addGrid.Children.Add(valBox);
+            addGrid.Children.Add(addBtn);
+            addCard.Child = addGrid;
+            root.Children.Add(addCard);
 
-            _flagListPanel = new StackPanel();
-            RefreshFlagListUi();
-            editorStack.Children.Add(_flagListPanel);
-
-            editorCard.Child = editorStack;
-            root.Children.Add(editorCard);
+            _fastFlagRowsPanel = new StackPanel();
+            RefreshFastFlagEditorRows();
+            root.Children.Add(_fastFlagRowsPanel);
 
             return root;
         }
 
-        private void RefreshFlagListUi()
+        private void RefreshFastFlagEditorRows()
         {
-            if (_flagListPanel == null) return;
-            _flagListPanel.Children.Clear();
+            if (_fastFlagRowsPanel == null) return;
+            _fastFlagRowsPanel.Children.Clear();
 
             foreach (var kv in new Dictionary<string, string>(_fastFlags.Flags))
             {
                 string key = kv.Key;
                 string val = kv.Value;
 
-                var row = new Border
-                {
-                    CornerRadius = new CornerRadius(7),
-                    BorderThickness = new Thickness(1),
-                    Padding = new Thickness(12, 7, 12, 7),
-                    Margin = new Thickness(0, 0, 0, 6)
-                };
-                row.SetResourceReference(Border.BackgroundProperty, "BgCardAltBrush");
-                row.SetResourceReference(Border.BorderBrushProperty, "BorderSubtleBrush");
-
+                var card = NRBloxTheme.CreateCard(new Thickness(0, 0, 0, 6), new Thickness(14, 10, 14, 10));
                 var g = new Grid();
                 g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-                var kText = NRBloxTheme.CreateText(key, 12.5, FontWeights.SemiBold, "TextPrimaryBrush");
-                kText.VerticalAlignment = VerticalAlignment.Center;
-                Grid.SetColumn(kText, 0);
-                g.Children.Add(kText);
+                var kTb = NRBloxTheme.CreateText(key, 13, FontWeights.SemiBold, "TextPrimaryBrush");
+                kTb.VerticalAlignment = VerticalAlignment.Center;
+                Grid.SetColumn(kTb, 0);
+                g.Children.Add(kTb);
 
-                var vText = NRBloxTheme.CreateText(val, 12.5, FontWeights.Bold, "AccentPrimaryBrush", new Thickness(12, 0, 14, 0));
-                vText.VerticalAlignment = VerticalAlignment.Center;
-                Grid.SetColumn(vText, 1);
-                g.Children.Add(vText);
+                var vTb = NRBloxTheme.CreateText(val, 13, FontWeights.Normal, "AccentLinkBrush", new Thickness(12, 0, 14, 0));
+                vTb.VerticalAlignment = VerticalAlignment.Center;
+                Grid.SetColumn(vTb, 1);
+                g.Children.Add(vTb);
 
-                var delBtn = NRBloxTheme.CreateStyledButton("Remover", false, (s, e) =>
+                var delBtn = NRBloxTheme.CreateStyledButton("Delete", false, (s, e) =>
                 {
                     _fastFlags.SetOrRemove(key, null);
                     _fastFlags.SaveAndSync();
-                    RefreshFlagListUi();
-                    if (_flagCountMetric != null) _flagCountMetric.Text = _fastFlags.Flags.Count.ToString();
+                    RefreshFastFlagEditorRows();
                 });
-                delBtn.Padding = new Thickness(10, 3, 10, 3);
+                delBtn.Padding = new Thickness(12, 4, 12, 4);
                 Grid.SetColumn(delBtn, 2);
                 g.Children.Add(delBtn);
 
-                row.Child = g;
-                _flagListPanel.Children.Add(row);
+                card.Child = g;
+                _fastFlagRowsPanel.Children.Add(card);
             }
         }
 
         // =====================================================================
-        // TAB 3: MODS & VISUAIS
+        // PAGE 5: APPEARANCE (Screenshots 10 & 11)
         // =====================================================================
-        private UIElement BuildModsTab()
+        private UIElement BuildAppearancePage()
         {
             var root = new StackPanel();
-
-            root.Children.Add(NRBloxTheme.CreateText("Mods & Customizações Visuais", 18, FontWeights.ExtraBold, "TextPrimaryBrush", new Thickness(0, 0, 0, 4)));
-            root.Children.Add(NRBloxTheme.CreateText(
-                "Aplique cursores clássicos, sons antigos, cenário clássico de avatar e fontes customizadas com backup automático (.nrblox_orig).",
-                12.5, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 0, 0, 14)
-            ));
+            root.Children.Add(CreatePageHeader("Appearance", "Configure how NRBlox should look."));
 
             root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Estilo do Cursor do Mouse",
-                "Substitui as texturas ArrowCursor.png e ArrowFarCursor.png do cliente.",
+                "Global Theme",
+                null,
                 NRBloxTheme.CreateStyledComboBox(
-                    new string[] { "Default", "From2006", "From2013" },
-                    _settings.CursorType,
-                    val =>
+                    new string[] { "System default", "Light", "Dark" },
+                    _settings.ThemeMode,
+                    v =>
                     {
-                        _settings.CursorType = val;
-                        SaveAllSettings("Cursor alterado para " + val);
+                        _settings.ThemeMode = v;
+                        NRBloxTheme.ApplyTheme(Resources, v);
                     }
                 )
             ));
 
             root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Sons Clássicos de Personagem (2013)",
-                "Restaura os sons clássicos de passos, pulo e levantar na pasta content\\sounds.",
-                NRBloxTheme.CreateToggleSwitch(_settings.UseOldCharacterSounds, val =>
-                {
-                    _settings.UseOldCharacterSounds = val;
-                    SaveAllSettings("Sons clássicos " + (val ? "ativados" : "restaurados ao original"));
-                })
+                "Language",
+                "A relaunch is required for changes to take effect.",
+                NRBloxTheme.CreateStyledComboBox(
+                    new string[] { "System default", "Português (Brasil)", "English" },
+                    _settings.Language,
+                    v => _settings.Language = v
+                )
             ));
 
-            root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Cenário Clássico do Editor de Avatar (OldAvatarBackground.rbxl)",
-                "Substitui o fundo escuro do editor de avatar pelo cenário clássico.",
-                NRBloxTheme.CreateToggleSwitch(_settings.UseOldAvatarBackground, val =>
-                {
-                    _settings.UseOldAvatarBackground = val;
-                    SaveAllSettings("Cenário do editor de avatar atualizado");
-                })
-            ));
+            // Bootstrapper header with [Preview] button on the right
+            var bootHeaderGrid = new Grid { Margin = new Thickness(0, 14, 0, 10) };
+            bootHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            bootHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            // Custom Font Picker Row
-            var fontBtns = new StackPanel { Orientation = Orientation.Horizontal };
-            fontBtns.Children.Add(NRBloxTheme.CreateStyledButton("Selecionar Fonte (.ttf/.otf)", false, (s, e) =>
+            var bootTexts = new StackPanel();
+            bootTexts.Children.Add(NRBloxTheme.CreateText("Bootstrapper", 18, FontWeights.SemiBold, "TextPrimaryBrush"));
+            bootTexts.Children.Add(NRBloxTheme.CreateText("You can make it look different, retro, or even just like Roblox.", 12.5, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 2, 0, 0)));
+            Grid.SetColumn(bootTexts, 0);
+            bootHeaderGrid.Children.Add(bootTexts);
+
+            var previewBtn = NRBloxTheme.CreateStyledButton("Preview", false, (s, e) =>
             {
-                var dlg = new OpenFileDialog
-                {
-                    Title = "Selecionar Fonte para o Cliente Roblox",
-                    Filter = "Fontes TrueType/OpenType (*.ttf;*.otf)|*.ttf;*.otf"
-                };
-                if (dlg.ShowDialog() == true)
-                {
-                    _settings.CustomFontPath = dlg.FileName;
-                    SaveAllSettings("Fonte customizada aplicada: " + Path.GetFileName(dlg.FileName));
-                }
-            }, new Thickness(0, 0, 8, 0)));
-
-            fontBtns.Children.Add(NRBloxTheme.CreateStyledButton("Restaurar Padrão", false, (s, e) =>
-            {
-                _settings.CustomFontPath = "";
-                SaveAllSettings("Fonte padrão restaurada");
-            }));
-
-            root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Fonte Tipográfica Customizada",
-                "Aplica uma fonte .ttf ou .otf personalizada em toda a interface do cliente.",
-                fontBtns
-            ));
-
-            root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Pasta de Modificações Customizadas (data\\Modifications)",
-                "Qualquer arquivo colocado nesta pasta espelha automaticamente a estrutura da versão do Roblox.",
-                NRBloxTheme.CreateStyledButton("📂 Abrir Pasta de Mods", false, (s, e) =>
-                {
-                    Process.Start(new ProcessStartInfo { FileName = "explorer.exe", Arguments = "\"" + NRBloxPaths.ModificationsDir + "\"", UseShellExecute = true });
-                })
-            ));
-
-            return root;
-        }
-
-        // =====================================================================
-        // TAB 4: SERVIDOR, ACTIVITY WATCHER & DISCORD RPC
-        // =====================================================================
-        private UIElement BuildServerTab()
-        {
-            var root = new StackPanel();
-
-            root.Children.Add(NRBloxTheme.CreateText("Monitor de Servidor em Tempo Real & Discord RPC", 18, FontWeights.ExtraBold, "TextPrimaryBrush", new Thickness(0, 0, 0, 4)));
-            root.Children.Add(NRBloxTheme.CreateText(
-                "Inspeciona os logs do cliente em tempo real para identificar o IP UDMUX, geolocalização do servidor e atualizar seu status no Discord.",
-                12.5, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 0, 0, 14)
-            ));
-
-            var liveCard = NRBloxTheme.CreateBentoCard(new Thickness(0, 0, 0, 16), new Thickness(20, 18, 20, 18));
-            liveCard.SetResourceReference(Border.BorderBrushProperty, "BorderAccentBrush");
-            var liveStack = new StackPanel();
-            liveStack.Children.Add(NRBloxTheme.CreateText("SESSÃO DE JOGO ATUAL", 11, FontWeights.Bold, "AccentPrimaryBrush"));
-            _serverLocationLabel = NRBloxTheme.CreateText(_watcher.CurrentSession.Location, 20, FontWeights.ExtraBold, "TextPrimaryBrush", new Thickness(0, 4, 0, 4));
-            _serverIpLabel = NRBloxTheme.CreateText("IP do Servidor (UDMUX): " + _watcher.CurrentSession.ServerIp, 13, FontWeights.Medium, "TextSecondaryBrush");
-            _serverPlaceJobLabel = NRBloxTheme.CreateText(
-                string.Format("PlaceId: {0}  •  JobId: {1}", _watcher.CurrentSession.PlaceId, _watcher.CurrentSession.JobId),
-                12, FontWeights.Normal, "TextMutedBrush", new Thickness(0, 3, 0, 0)
-            );
-            liveStack.Children.Add(_serverLocationLabel);
-            liveStack.Children.Add(_serverIpLabel);
-            liveStack.Children.Add(_serverPlaceJobLabel);
-            liveCard.Child = liveStack;
-            root.Children.Add(liveCard);
-
-            root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Monitoramento de Logs e Geolocalização de Servidor",
-                "Identifica automaticamente a cidade/país do servidor do Roblox ao entrar em uma partida.",
-                NRBloxTheme.CreateToggleSwitch(_settings.EnableActivityTracking, val =>
-                {
-                    _settings.EnableActivityTracking = val;
-                    SaveAllSettings("Monitoramento de atividade " + (val ? "ativado" : "desativado"));
-                })
-            ));
-
-            root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Discord Rich Presence Nativo (IPC Named Pipe)",
-                "Exibe o jogo atual e o tempo de sessão diretamente no seu perfil do Discord sem precisar de plugins externos.",
-                NRBloxTheme.CreateToggleSwitch(_settings.EnableDiscordRichPresence, val =>
-                {
-                    _settings.EnableDiscordRichPresence = val;
-                    if (!val) _discord.ClearPresence();
-                    SaveAllSettings("Discord Rich Presence " + (val ? "ativado" : "desativado"));
-                })
-            ));
-
-            // Server History Card
-            var histCard = NRBloxTheme.CreateBentoCard(new Thickness(0, 10, 0, 12), new Thickness(18, 16, 18, 16));
-            var histStack = new StackPanel();
-            histStack.Children.Add(NRBloxTheme.CreateText("Histórico de Servidores Recentes (Reconexão Rápida)", 15, FontWeights.Bold, "TextPrimaryBrush", new Thickness(0, 0, 0, 10)));
-            _historyListPanel = new StackPanel();
-            RefreshHistoryUi();
-            histStack.Children.Add(_historyListPanel);
-            histCard.Child = histStack;
-            root.Children.Add(histCard);
-
-            // Custom Integrations Card
-            var intCard = NRBloxTheme.CreateBentoCard(new Thickness(0, 4, 0, 12), new Thickness(18, 16, 18, 16));
-            var intStack = new StackPanel();
-            var intHeader = new Grid { Margin = new Thickness(0, 0, 0, 10) };
-            intHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            intHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            intHeader.Children.Add(NRBloxTheme.CreateText("Integrações Externas (Auto-Iniciar junto com o Roblox)", 15, FontWeights.Bold, "TextPrimaryBrush"));
-            var addExeBtn = NRBloxTheme.CreateStyledButton("+ Adicionar Programa (.exe)", false, (s, e) =>
-            {
-                var dlg = new OpenFileDialog { Title = "Adicionar Programa para Iniciar com o Roblox", Filter = "Executáveis (*.exe)|*.exe" };
-                if (dlg.ShowDialog() == true)
-                {
-                    if (_settings.CustomIntegrations == null) _settings.CustomIntegrations = new List<string>();
-                    if (!_settings.CustomIntegrations.Contains(dlg.FileName))
-                    {
-                        _settings.CustomIntegrations.Add(dlg.FileName);
-                        SaveAllSettings("Integração adicionada");
-                        RefreshCustomIntegrationsUi();
-                    }
-                }
+                var prev = new NRBloxBootstrapperWindow(_settings, _fastFlags, _mods, null, false, true);
+                prev.ShowDialog();
             });
-            Grid.SetColumn(addExeBtn, 1);
-            intHeader.Children.Add(addExeBtn);
-            intStack.Children.Add(intHeader);
+            previewBtn.VerticalAlignment = VerticalAlignment.Center;
+            Grid.SetColumn(previewBtn, 1);
+            bootHeaderGrid.Children.Add(previewBtn);
+            root.Children.Add(bootHeaderGrid);
 
-            _customIntegrationsPanel = new StackPanel();
-            RefreshCustomIntegrationsUi();
-            intStack.Children.Add(_customIntegrationsPanel);
-            intCard.Child = intStack;
-            root.Children.Add(intCard);
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Style",
+                "Choose how it should look. Dark theme does not apply to Legacy/Vista.",
+                NRBloxTheme.CreateStyledComboBox(
+                    new string[] { "NRBlox", "Fluent Aero", "Vista", "Legacy (2008)", "Legacy (2011)", "Progress" },
+                    _settings.BootstrapperStyle,
+                    v => _settings.BootstrapperStyle = v
+                )
+            ));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Icon",
+                "Choose what icon it should use.",
+                NRBloxTheme.CreateStyledComboBox(
+                    new string[] { "NRBlox", "2008", "2011", "Early 2015", "Late 2015", "2017", "2019", "2022", "Custom" },
+                    _settings.BootstrapperIcon,
+                    v => _settings.BootstrapperIcon = v
+                )
+            ));
+
+            // Expandable Bootstrapper customization (Matches Screenshot 11)
+            var custBody = new StackPanel();
+
+            var titleGrid = new Grid { Margin = new Thickness(0, 0, 0, 12) };
+            titleGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
+            titleGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            var titleLbl = NRBloxTheme.CreateText("Title", 13, FontWeights.Normal, "TextSecondaryBrush");
+            titleLbl.VerticalAlignment = VerticalAlignment.Top;
+            titleLbl.Margin = new Thickness(0, 6, 0, 0);
+            Grid.SetColumn(titleLbl, 0);
+            titleGrid.Children.Add(titleLbl);
+
+            var titleRight = new StackPanel();
+            var titleBox = new TextBox { Text = _settings.BootstrapperTitle ?? "NRBlox", Padding = new Thickness(10, 6, 10, 6), FontSize = 13 };
+            titleBox.TextChanged += (s, e) => _settings.BootstrapperTitle = titleBox.Text;
+            titleRight.Children.Add(titleBox);
+            titleRight.Children.Add(NRBloxTheme.CreateText("The text that shows as the title of the bootstrapper.", 11.5, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 4, 0, 0)));
+            Grid.SetColumn(titleRight, 1);
+            titleGrid.Children.Add(titleRight);
+            custBody.Children.Add(titleGrid);
+
+            var iconGrid = new Grid();
+            iconGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
+            iconGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            var iconLbl = NRBloxTheme.CreateText("Custom Icon", 13, FontWeights.Normal, "TextSecondaryBrush");
+            iconLbl.VerticalAlignment = VerticalAlignment.Top;
+            iconLbl.Margin = new Thickness(0, 6, 0, 0);
+            Grid.SetColumn(iconLbl, 0);
+            iconGrid.Children.Add(iconLbl);
+
+            var iconRight = new StackPanel();
+            var iconRowGrid = new Grid();
+            iconRowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            iconRowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var customIconBox = new TextBox { Text = _settings.BootstrapperCustomIconPath ?? "", Padding = new Thickness(10, 6, 10, 6), Margin = new Thickness(0, 0, 8, 0), FontSize = 13 };
+            customIconBox.TextChanged += (s, e) => _settings.BootstrapperCustomIconPath = customIconBox.Text;
+            Grid.SetColumn(customIconBox, 0);
+            iconRowGrid.Children.Add(customIconBox);
+
+            var browseIconBtn = NRBloxTheme.CreateStyledButton("📁 Browse", false, (s, e) =>
+            {
+                var dlg = new OpenFileDialog { Filter = "Icon files (*.ico)|*.ico" };
+                if (dlg.ShowDialog() == true) customIconBox.Text = dlg.FileName;
+            });
+            Grid.SetColumn(browseIconBtn, 1);
+            iconRowGrid.Children.Add(browseIconBtn);
+
+            iconRight.Children.Add(iconRowGrid);
+            iconRight.Children.Add(NRBloxTheme.CreateText("Must be a multi-size .ico file with sizes 16px to 128px. Set Icon as 'Custom' to use it.", 11.5, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 4, 0, 0)));
+            Grid.SetColumn(iconRight, 1);
+            iconGrid.Children.Add(iconGrid.Children.Count > 0 ? iconRight : iconRight);
+            custBody.Children.Add(iconGrid);
+
+            root.Children.Add(NRBloxTheme.CreateExpandableCard(
+                "Bootstrapper customization",
+                "Configure other customizable Bootstrapper options.",
+                null,
+                custBody,
+                true
+            ));
 
             return root;
         }
 
-        private void OnServerSessionUpdated(ServerSessionInfo info)
-        {
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                if (_serverLocationLabel != null) _serverLocationLabel.Text = info.Location;
-                if (_serverIpLabel != null) _serverIpLabel.Text = "IP do Servidor (UDMUX): " + info.ServerIp + ":" + info.ServerPort;
-                if (_serverPlaceJobLabel != null) _serverPlaceJobLabel.Text = string.Format("PlaceId: {0}  •  JobId: {1}", info.PlaceId, info.JobId);
-                RefreshHistoryUi();
-            }));
-        }
-
-        private void RefreshHistoryUi()
-        {
-            if (_historyListPanel == null) return;
-            _historyListPanel.Children.Clear();
-
-            if (_watcher.History == null || _watcher.History.Count == 0)
-            {
-                _historyListPanel.Children.Add(NRBloxTheme.CreateText("Nenhum servidor registrado ainda. Entre em um jogo para gravar o histórico de reconexão.", 12.5, FontWeights.Normal, "TextSecondaryBrush"));
-                return;
-            }
-
-            foreach (var item in _watcher.History)
-            {
-                var row = new Border
-                {
-                    CornerRadius = new CornerRadius(7),
-                    BorderThickness = new Thickness(1),
-                    Padding = new Thickness(12, 8, 12, 8),
-                    Margin = new Thickness(0, 0, 0, 6)
-                };
-                row.SetResourceReference(Border.BackgroundProperty, "BgCardAltBrush");
-                row.SetResourceReference(Border.BorderBrushProperty, "BorderSubtleBrush");
-
-                var g = new Grid();
-                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-                var txt = NRBloxTheme.CreateText(
-                    string.Format("Place {0} • {1} ({2}) • {3}", item.PlaceId, item.Location, item.ServerIp, item.JoinedTime),
-                    12.5, FontWeights.SemiBold, "TextPrimaryBrush"
-                );
-                txt.VerticalAlignment = VerticalAlignment.Center;
-                Grid.SetColumn(txt, 0);
-                g.Children.Add(txt);
-
-                string uri = string.Format("roblox://experiences/start?placeId={0}&gameInstanceId={1}", item.PlaceId, item.JobId);
-                var rejoinBtn = NRBloxTheme.CreateStyledButton("Reentrar", true, (s, e) => LaunchRoblox(false, uri));
-                rejoinBtn.Padding = new Thickness(12, 4, 12, 4);
-                Grid.SetColumn(rejoinBtn, 1);
-                g.Children.Add(rejoinBtn);
-
-                row.Child = g;
-                _historyListPanel.Children.Add(row);
-            }
-        }
-
-        private void RefreshCustomIntegrationsUi()
-        {
-            if (_customIntegrationsPanel == null) return;
-            _customIntegrationsPanel.Children.Clear();
-
-            if (_settings.CustomIntegrations == null || _settings.CustomIntegrations.Count == 0)
-            {
-                _customIntegrationsPanel.Children.Add(NRBloxTheme.CreateText("Nenhum aplicativo externo configurado.", 12.5, FontWeights.Normal, "TextSecondaryBrush"));
-                return;
-            }
-
-            foreach (string exePath in new List<string>(_settings.CustomIntegrations))
-            {
-                var row = new Border
-                {
-                    CornerRadius = new CornerRadius(7),
-                    BorderThickness = new Thickness(1),
-                    Padding = new Thickness(12, 7, 12, 7),
-                    Margin = new Thickness(0, 0, 0, 6)
-                };
-                row.SetResourceReference(Border.BackgroundProperty, "BgCardAltBrush");
-                row.SetResourceReference(Border.BorderBrushProperty, "BorderSubtleBrush");
-
-                var g = new Grid();
-                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-                var t = NRBloxTheme.CreateText(exePath, 12.5, FontWeights.Medium, "TextPrimaryBrush");
-                t.VerticalAlignment = VerticalAlignment.Center;
-                Grid.SetColumn(t, 0);
-                g.Children.Add(t);
-
-                var remBtn = NRBloxTheme.CreateStyledButton("Remover", false, (s, e) =>
-                {
-                    _settings.CustomIntegrations.Remove(exePath);
-                    SaveAllSettings("Integração removida");
-                    RefreshCustomIntegrationsUi();
-                });
-                remBtn.Padding = new Thickness(10, 3, 10, 3);
-                Grid.SetColumn(remBtn, 1);
-                g.Children.Add(remBtn);
-
-                row.Child = g;
-                _customIntegrationsPanel.Children.Add(row);
-            }
-        }
-
         // =====================================================================
-        // TAB 5: SISTEMA, ATALHOS & SOBRE (Criador + Discord + Wiki)
+        // PAGE 6: SHORTCUTS (Screenshot 12)
         // =====================================================================
-        private UIElement BuildSystemTab()
+        private UIElement BuildShortcutsPage()
         {
             var root = new StackPanel();
-
-            root.Children.Add(NRBloxTheme.CreateText("Sistema, Integração Windows & Comunidade NRBlox", 18, FontWeights.ExtraBold, "TextPrimaryBrush", new Thickness(0, 0, 0, 12)));
-
-            root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Registrar Protocolos do Windows (roblox-player://, roblox://, nrblox://)",
-                "Faz com que o botão 'Play' no site do Roblox inicie automaticamente através do NRBlox.",
-                NRBloxTheme.CreateStyledButton("Registrar Protocolos", true, (s, e) =>
-                {
-                    SystemIntegrationService.RegisterWindowsProtocols();
-                    MessageBox.Show("Protocolos roblox-player://, roblox:// e nrblox:// registrados com sucesso para o NRBlox!", "NRBlox", MessageBoxButton.OK, MessageBoxImage.Information);
-                })
-            ));
+            root.Children.Add(CreatePageHeader("Shortcuts", "Configure how NRBlox can be readily launched."));
 
             root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Criar Atalhos na Área de Trabalho",
-                "Cria os atalhos 'NRBlox' e 'Jogar Roblox (NRBlox)' no seu Desktop.",
-                NRBloxTheme.CreateStyledButton("Criar Atalhos", false, (s, e) =>
-                {
-                    bool ok = SystemIntegrationService.CreateDesktopShortcuts();
-                    MessageBox.Show(ok ? "Atalhos criados na Área de Trabalho com sucesso!" : "Não foi possível criar os atalhos.", "NRBlox", MessageBoxButton.OK, MessageBoxImage.Information);
-                })
+                "Extract Roblox icons to folder",
+                "Allows you to use NRBlox's range of Roblox icons for your shortcuts.",
+                NRBloxTheme.CreateToggleSwitch(_settings.ExtractIconsToFolder, v => _settings.ExtractIconsToFolder = v)
             ));
 
-            root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Verificar Integridade do Cliente (" + NRBloxPaths.TargetVersionGuid + ")",
-                "Valida os binários do cliente, AppSettings.xml e ClientAppSettings.json.",
-                NRBloxTheme.CreateStyledButton("Executar Diagnóstico", false, (s, e) =>
-                {
-                    string rep = SystemIntegrationService.VerifyClientInstallation();
-                    MessageBox.Show(rep, "Diagnóstico NRBlox", MessageBoxButton.OK, MessageBoxImage.Information);
-                })
+            root.Children.Add(CreateSectionHeader("General"));
+            root.Children.Add(NRBloxTheme.CreateText("These are the shortcuts that bring up the multi-choice launch menu.", 12.5, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 0, 0, 10)));
+
+            var genGrid = new UniformGrid { Columns = 2, Margin = new Thickness(0, 0, 0, 10) };
+            genGrid.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Desktop icon",
+                null,
+                NRBloxTheme.CreateToggleSwitch(_settings.ShortcutDesktopIcon, v => _settings.ShortcutDesktopIcon = v),
+                new Thickness(0, 0, 5, 0)
             ));
-
-            var dirsBtns = new StackPanel { Orientation = Orientation.Horizontal };
-            dirsBtns.Children.Add(NRBloxTheme.CreateStyledButton("Pasta da Versão", false, (s, e) => OpenFolder(NRBloxPaths.GetRobloxVersionDir()), new Thickness(0, 0, 8, 0)));
-            dirsBtns.Children.Add(NRBloxTheme.CreateStyledButton("Pasta de Logs", false, (s, e) => OpenFolder(NRBloxPaths.GetRobloxLogsDir()), new Thickness(0, 0, 8, 0)));
-            dirsBtns.Children.Add(NRBloxTheme.CreateStyledButton("Pasta NRBlox", false, (s, e) => OpenFolder(NRBloxPaths.BaseDir)));
-
-            root.Children.Add(NRBloxTheme.CreateSettingRow(
-                "Diretórios do Sistema",
-                "Acesso rápido às pastas de instalação, logs e configurações do NRBlox.",
-                dirsBtns
+            genGrid.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Start Menu icon",
+                null,
+                NRBloxTheme.CreateToggleSwitch(_settings.ShortcutStartMenuIcon, v => _settings.ShortcutStartMenuIcon = v),
+                new Thickness(5, 0, 0, 0)
             ));
+            root.Children.Add(genGrid);
 
-            // About / Official Community Card (Only Creator FaelSemW, Discord & GitHub Wiki)
-            var aboutCard = NRBloxTheme.CreateBentoCard(new Thickness(0, 14, 0, 0), new Thickness(22, 20, 22, 20));
-            aboutCard.SetResourceReference(Border.BorderBrushProperty, "BorderAccentBrush");
+            root.Children.Add(CreateSectionHeader("Function"));
+            root.Children.Add(NRBloxTheme.CreateText("Create shortcuts for quick access to specific functions. These will all be placed on the Desktop.", 12.5, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 0, 0, 10)));
 
-            var aboutStack = new StackPanel();
-            aboutStack.Children.Add(NRBloxTheme.CreateText("⚡ NRBlox — Projeto 100% Open-Source", 18, FontWeights.ExtraBold, "TextPrimaryBrush"));
-            aboutStack.Children.Add(NRBloxTheme.CreateText(
-                "Desenvolvido por FaelSemW • Arquitetura dedicada para Windows (WPF Nativo) e Linux (GTK/Tkinter + Sober/Vinegar/Wine).",
-                13, FontWeights.Medium, "TextSecondaryBrush", new Thickness(0, 6, 0, 14)
+            var fnGrid = new UniformGrid { Columns = 3, Margin = new Thickness(0, 0, 0, 10) };
+            fnGrid.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Launch Roblox",
+                null,
+                NRBloxTheme.CreateToggleSwitch(_settings.ShortcutLaunchRoblox, v => _settings.ShortcutLaunchRoblox = v),
+                new Thickness(0, 0, 5, 0)
             ));
-
-            var communityBtns = new StackPanel { Orientation = Orientation.Horizontal };
-            communityBtns.Children.Add(NRBloxTheme.CreateStyledButton("💬 Entrar na Comunidade Discord Oficial", true, (s, e) => OpenUrl(NRBloxPaths.DiscordUrl), new Thickness(0, 0, 10, 0)));
-            communityBtns.Children.Add(NRBloxTheme.CreateStyledButton("📖 Acessar Wiki Completa no GitHub", false, (s, e) => OpenUrl(NRBloxPaths.GitHubWikiUrl), new Thickness(0, 0, 10, 0)));
-            communityBtns.Children.Add(NRBloxTheme.CreateStyledButton("⭐ Repositório GitHub", false, (s, e) => OpenUrl(NRBloxPaths.GitHubRepoUrl)));
-            aboutStack.Children.Add(communityBtns);
-
-            aboutCard.Child = aboutStack;
-            root.Children.Add(aboutCard);
+            fnGrid.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Launch Roblox Studio",
+                null,
+                NRBloxTheme.CreateToggleSwitch(_settings.ShortcutLaunchStudio, v => _settings.ShortcutLaunchStudio = v),
+                new Thickness(5, 0, 5, 0)
+            ));
+            fnGrid.Children.Add(NRBloxTheme.CreateSettingRow(
+                "NRBlox Settings",
+                null,
+                NRBloxTheme.CreateToggleSwitch(_settings.ShortcutSettings, v => _settings.ShortcutSettings = v),
+                new Thickness(5, 0, 0, 0)
+            ));
+            root.Children.Add(fnGrid);
 
             return root;
         }
 
-        private void LaunchRoblox(bool isStudio, string launchUri)
+        // =====================================================================
+        // PAGE 7: NRBLOX BEHAVIOUR (Screenshot 13)
+        // =====================================================================
+        private UIElement BuildNRBloxBehaviourPage()
         {
-            var dlg = new NRBloxBootstrapperWindow(_settings, _fastFlags, _mods, launchUri, isStudio);
-            dlg.ShowDialog();
+            var root = new StackPanel();
+            root.Children.Add(CreatePageHeader("NRBlox", "Configure options related to NRBlox's behaviour itself."));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Automatically update NRBlox",
+                "NRBlox will automatically check and update itself when launching Roblox.",
+                NRBloxTheme.CreateToggleSwitch(_settings.AutoUpdateNRBlox, v => _settings.AutoUpdateNRBlox = v)
+            ));
+
+            root.Children.Add(NRBloxTheme.CreateSettingRow(
+                "Enable sending of analytics",
+                "Anonymous diagnostic telemetry.",
+                NRBloxTheme.CreateToggleSwitch(_settings.EnableAnalytics, v => _settings.EnableAnalytics = v)
+            ));
+
+            var exportBtn = NRBloxTheme.CreateStyledButton("📋 Export", false, (s, e) =>
+            {
+                string diag = SystemIntegrationService.VerifyClientInstallation();
+                Clipboard.SetText(diag);
+                MessageBox.Show("Diagnostic data copied to clipboard!", "NRBlox", MessageBoxButton.OK, MessageBoxImage.Information);
+            });
+
+            var exportChecksGrid = new UniformGrid { Columns = 2 };
+            var cb1 = new CheckBox
+            {
+                Content = NRBloxTheme.CreateText("NRBlox configuration", 13, FontWeights.Normal, "TextPrimaryBrush"),
+                IsChecked = _settings.ExportConfigCheck,
+                VerticalContentAlignment = VerticalAlignment.Center
+            };
+            cb1.Checked += (s, e) => _settings.ExportConfigCheck = true;
+            cb1.Unchecked += (s, e) => _settings.ExportConfigCheck = false;
+
+            var cb2 = new CheckBox
+            {
+                Content = NRBloxTheme.CreateText("All NRBlox logs", 13, FontWeights.Normal, "TextPrimaryBrush"),
+                IsChecked = _settings.ExportLogsCheck,
+                VerticalContentAlignment = VerticalAlignment.Center
+            };
+            cb2.Checked += (s, e) => _settings.ExportLogsCheck = true;
+            cb2.Unchecked += (s, e) => _settings.ExportLogsCheck = false;
+
+            exportChecksGrid.Children.Add(cb1);
+            exportChecksGrid.Children.Add(cb2);
+
+            root.Children.Add(NRBloxTheme.CreateExpandableCard(
+                "Export diagnostic data",
+                "Gather information that can be uploaded online to troubleshoot a problem you're having.",
+                exportBtn,
+                exportChecksGrid,
+                true
+            ));
+
+            return root;
+        }
+
+        // =====================================================================
+        // PAGE 8: ABOUT (FaelSemW + Discord + Wiki)
+        // =====================================================================
+        private UIElement BuildAboutPage()
+        {
+            var root = new StackPanel();
+            root.Children.Add(CreatePageHeader("About NRBlox", "100% Open-Source Roblox Engine Controller & Bootstrapper."));
+
+            var heroCard = NRBloxTheme.CreateCard(new Thickness(0, 0, 0, 14), new Thickness(20));
+            var heroStack = new StackPanel { Orientation = Orientation.Horizontal };
+            var logo = NRBloxTheme.CreateNRBloxLogo(48);
+            logo.Margin = new Thickness(0, 0, 18, 0);
+            heroStack.Children.Add(logo);
+
+            var infoStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            infoStack.Children.Add(NRBloxTheme.CreateText("NRBlox Version 3.0.0", 18, FontWeights.SemiBold, "TextPrimaryBrush"));
+            infoStack.Children.Add(NRBloxTheme.CreateText("Created & Maintained by FaelSemW • Licensed under MIT", 13, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 3, 0, 0)));
+            heroStack.Children.Add(infoStack);
+            heroCard.Child = heroStack;
+            root.Children.Add(heroCard);
+
+            root.Children.Add(NRBloxTheme.CreateActionCard(
+                "💬",
+                "Official Discord Community",
+                "Join the official NRBlox community server on Discord.",
+                () => OpenUrl(NRBloxPaths.DiscordUrl),
+                new Thickness(0, 0, 0, 10)
+            ));
+
+            root.Children.Add(NRBloxTheme.CreateActionCard(
+                "📖",
+                "Official NRBlox Wiki",
+                "Read the complete documentation, FastFlag guides, and troubleshooting tips on GitHub.",
+                () => OpenUrl(NRBloxPaths.GitHubWikiUrl),
+                new Thickness(0, 0, 0, 10)
+            ));
+
+            root.Children.Add(NRBloxTheme.CreateActionCard(
+                "⭐",
+                "GitHub Repository",
+                "View source code and releases at github.com/FaelSemW/NRBlox.",
+                () => OpenUrl(NRBloxPaths.GitHubRepoUrl),
+                new Thickness(0, 0, 0, 10)
+            ));
+
+            return root;
+        }
+
+        private static void OpenCompatibilityProperties()
+        {
+            try
+            {
+                string exe = Path.Combine(NRBloxPaths.GetRobloxVersionDir(), "RobloxPlayerBeta.exe");
+                if (File.Exists(exe))
+                {
+                    Process.Start(new ProcessStartInfo { FileName = "explorer.exe", Arguments = "/select,\"" + exe + "\"", UseShellExecute = true });
+                }
+            }
+            catch { }
         }
 
         private static void OpenUrl(string url)
@@ -1049,13 +1129,6 @@ namespace NRBlox.Windows.UI
                 Process.Start(new ProcessStartInfo { FileName = "explorer.exe", Arguments = "\"" + folder + "\"", UseShellExecute = true });
             }
             catch { }
-        }
-
-        protected override void OnClosed(EventArgs e)
-        {
-            base.OnClosed(e);
-            _watcher.Stop();
-            _discord.Dispose();
         }
     }
 }

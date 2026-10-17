@@ -8,9 +8,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Security.Cryptography;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 
 namespace NRBlox.Windows.Core
@@ -88,97 +86,175 @@ namespace NRBlox.Windows.Core
 
         public static void EnsureDirectories()
         {
-            string[] dirs = new string[]
+            try
             {
-                DataDir,
-                ModificationsDir,
-                Path.Combine(ModificationsDir, "ClientSettings"),
-                Path.Combine(ModificationsDir, "content", "sounds"),
-                Path.Combine(ModificationsDir, "content", "fonts"),
-                Path.Combine(ModificationsDir, "content", "textures", "Cursors", "KeyboardMouse"),
-                Path.Combine(ModificationsDir, "ExtraContent", "places")
-            };
-            foreach (string d in dirs)
-            {
-                if (!Directory.Exists(d))
-                    Directory.CreateDirectory(d);
+                string[] dirs = new string[]
+                {
+                    DataDir,
+                    ModificationsDir,
+                    Path.Combine(ModificationsDir, "ClientSettings"),
+                    Path.Combine(ModificationsDir, "content", "sounds"),
+                    Path.Combine(ModificationsDir, "content", "fonts"),
+                    Path.Combine(ModificationsDir, "content", "textures", "Cursors", "KeyboardMouse"),
+                    Path.Combine(ModificationsDir, "ExtraContent", "places")
+                };
+                foreach (string d in dirs)
+                {
+                    if (!Directory.Exists(d))
+                        Directory.CreateDirectory(d);
+                }
             }
+            catch { }
+        }
+    }
+
+    public sealed class CustomIntegrationItem
+    {
+        public string Name { get; set; }
+        public string Location { get; set; }
+        public string LaunchArgs { get; set; }
+        public bool AutoClose { get; set; }
+
+        public CustomIntegrationItem()
+        {
+            Name = "New Integration";
+            Location = "";
+            LaunchArgs = "";
+            AutoClose = true;
+        }
+
+        public override string ToString()
+        {
+            return string.IsNullOrEmpty(Name) ? "New Integration" : Name;
         }
     }
 
     public sealed class NRBloxSettings
     {
-        // UI & Theme ("Dark" or "Light")
-        public string ThemeMode { get; set; }
+        // Appearance & Global
+        public string ThemeMode { get; set; } // "Light", "Dark", "System default"
+        public string Language { get; set; }
         public string BootstrapperStyle { get; set; }
-        public string Channel { get; set; }
-        public bool LockRobloxVersion { get; set; }
-        public bool MultiInstanceLaunching { get; set; }
-        public bool ConfirmLaunches { get; set; }
+        public string BootstrapperIcon { get; set; }
+        public string BootstrapperTitle { get; set; }
+        public string BootstrapperCustomIconPath { get; set; }
+        public bool TestMode { get; set; }
 
-        // FastFlag Presets
+        // Integrations
+        public bool EnableActivityTracking { get; set; }
+        public bool QueryServerLocation { get; set; }
+        public bool DisableDesktopAppPatch { get; set; }
+        public bool EnableDiscordRichPresence { get; set; }
+        public bool AllowActivityJoining { get; set; }
+        public bool ShowAccountOnRichPresence { get; set; }
+        public bool ShowServerDetails { get; set; }
+        public List<CustomIntegrationItem> CustomIntegrationItems { get; set; }
+        public List<string> CustomIntegrations { get; set; }
+
+        // Bootstrapper
+        public bool ConfirmLaunches { get; set; }
+        public bool BackgroundUpdates { get; set; }
+        public bool ForceRobloxReinstall { get; set; }
+        public bool MultiInstanceLaunching { get; set; }
+        public bool LockRobloxVersion { get; set; }
+        public string Channel { get; set; }
+
+        // Mods
+        public string CursorType { get; set; }
+        public bool UseOldAvatarBackground { get; set; }
+        public bool UseOldCharacterSounds { get; set; }
+        public bool UseClassicDeathSound { get; set; }
+        public string PreferredEmojiType { get; set; }
+        public string CustomFontPath { get; set; }
+        public List<string> AppliedModManifest { get; set; }
+
+        // Engine Settings (FastFlags)
         public bool UseFastFlagManager { get; set; }
         public int TargetFps { get; set; }
         public string RenderingMode { get; set; }
         public string LightingMode { get; set; }
         public string MsaaMode { get; set; }
-        public string TextureQuality { get; set; }
         public bool DisableDpiScale { get; set; }
+        public string TextureQuality { get; set; }
         public bool ManualFullscreen { get; set; }
         public bool DisablePostFx { get; set; }
         public bool DisableTelemetry { get; set; }
         public int MtuSize { get; set; }
+        public bool ResetEverythingToDefaults { get; set; }
 
-        // Mods & Customizations
-        public bool UseClassicDeathSound { get; set; }
-        public bool UseOldCharacterSounds { get; set; }
-        public string CursorType { get; set; }
-        public bool UseOldAvatarBackground { get; set; }
-        public bool DisableDesktopAppPatch { get; set; }
-        public string CustomFontPath { get; set; }
+        // Shortcuts
+        public bool ExtractIconsToFolder { get; set; }
+        public bool ShortcutDesktopIcon { get; set; }
+        public bool ShortcutStartMenuIcon { get; set; }
+        public bool ShortcutLaunchRoblox { get; set; }
+        public bool ShortcutLaunchStudio { get; set; }
+        public bool ShortcutSettings { get; set; }
 
-        // Activity & Integrations
-        public bool EnableActivityTracking { get; set; }
-        public bool EnableDiscordRichPresence { get; set; }
-        public bool ShowServerDetails { get; set; }
-        public bool ShowAccountOnRichPresence { get; set; }
-        public List<string> CustomIntegrations { get; set; }
-        public List<string> AppliedModManifest { get; set; }
+        // NRBlox Behaviour
+        public bool AutoUpdateNRBlox { get; set; }
+        public bool EnableAnalytics { get; set; }
+        public bool ExportConfigCheck { get; set; }
+        public bool ExportLogsCheck { get; set; }
 
         public NRBloxSettings()
         {
-            ThemeMode = "Dark";
-            BootstrapperStyle = "NRBlox Cyber Glass";
-            Channel = "production";
-            LockRobloxVersion = true;
-            MultiInstanceLaunching = false;
+            ThemeMode = "Light";
+            Language = "System default";
+            BootstrapperStyle = "NRBlox";
+            BootstrapperIcon = "NRBlox";
+            BootstrapperTitle = "NRBlox";
+            BootstrapperCustomIconPath = "";
+            TestMode = false;
+
+            EnableActivityTracking = true;
+            QueryServerLocation = true;
+            DisableDesktopAppPatch = false;
+            EnableDiscordRichPresence = true;
+            AllowActivityJoining = true;
+            ShowAccountOnRichPresence = true;
+            ShowServerDetails = true;
+            CustomIntegrationItems = new List<CustomIntegrationItem>();
+            CustomIntegrations = new List<string>();
+
             ConfirmLaunches = false;
+            BackgroundUpdates = false;
+            ForceRobloxReinstall = false;
+            MultiInstanceLaunching = false;
+            LockRobloxVersion = true;
+            Channel = "production";
+
+            CursorType = "Default";
+            UseOldAvatarBackground = false;
+            UseOldCharacterSounds = false;
+            UseClassicDeathSound = false;
+            PreferredEmojiType = "Default (Twemoji)";
+            CustomFontPath = "";
+            AppliedModManifest = new List<string>();
 
             UseFastFlagManager = true;
             TargetFps = 240;
             RenderingMode = "D3D11";
-            LightingMode = "Padrão";
-            MsaaMode = "4";
-            TextureQuality = "3";
+            LightingMode = "Chosen by game";
+            MsaaMode = "4x";
             DisableDpiScale = true;
+            TextureQuality = "Level 3 (Highest)";
             ManualFullscreen = true;
             DisablePostFx = false;
             DisableTelemetry = true;
             MtuSize = 0;
+            ResetEverythingToDefaults = false;
 
-            UseClassicDeathSound = false;
-            UseOldCharacterSounds = false;
-            CursorType = "Default";
-            UseOldAvatarBackground = false;
-            DisableDesktopAppPatch = false;
-            CustomFontPath = "";
+            ExtractIconsToFolder = false;
+            ShortcutDesktopIcon = true;
+            ShortcutStartMenuIcon = true;
+            ShortcutLaunchRoblox = false;
+            ShortcutLaunchStudio = false;
+            ShortcutSettings = false;
 
-            EnableActivityTracking = true;
-            EnableDiscordRichPresence = true;
-            ShowServerDetails = true;
-            ShowAccountOnRichPresence = true;
-            CustomIntegrations = new List<string>();
-            AppliedModManifest = new List<string>();
+            AutoUpdateNRBlox = true;
+            EnableAnalytics = false;
+            ExportConfigCheck = true;
+            ExportLogsCheck = true;
         }
     }
 
@@ -358,18 +434,41 @@ namespace NRBlox.Windows.Core
 
         public void ApplySettingsToFlags()
         {
+            if (_settings.ResetEverythingToDefaults)
+            {
+                Flags.Clear();
+                Flags["FFlagHandleAltEnterFullscreenManually"] = "False";
+                Flags["FIntDebugForceMSAASamples"] = "4";
+                Flags["DFFlagDisableDPIScale"] = "True";
+                Flags["DFFlagTextureQualityOverrideEnabled"] = "True";
+                Flags["DFIntTextureQualityOverride"] = "3";
+                _settings.ResetEverythingToDefaults = false;
+                return;
+            }
+
             // FPS Unlocker
             SetOrRemove("DFIntTaskSchedulerTargetFps", _settings.TargetFps > 0 ? _settings.TargetFps.ToString() : null);
 
-            // Fullscreen & DPI
+            // Exclusive Fullscreen & Display Scaling
             SetOrRemove("FFlagHandleAltEnterFullscreenManually", _settings.ManualFullscreen ? "False" : null);
             SetOrRemove("DFFlagDisableDPIScale", _settings.DisableDpiScale ? "True" : null);
 
-            // MSAA
-            SetOrRemove("FIntDebugForceMSAASamples", (_settings.MsaaMode == "Automático" || string.IsNullOrEmpty(_settings.MsaaMode)) ? null : _settings.MsaaMode);
+            // MSAA ("Automatic", "1x", "2x", "4x")
+            string msaaClean = (_settings.MsaaMode ?? "").Replace("x", "").Trim();
+            if (msaaClean == "1" || msaaClean == "2" || msaaClean == "4" || msaaClean == "8")
+                SetOrRemove("FIntDebugForceMSAASamples", msaaClean);
+            else
+                SetOrRemove("FIntDebugForceMSAASamples", null);
 
-            // Texture Quality
-            if (_settings.TextureQuality == "Automático" || string.IsNullOrEmpty(_settings.TextureQuality))
+            // Texture Quality ("Automatic", "Level 0 (Lowest)", "Level 1 (Low)", "Level 2 (Medium)", "Level 3 (Highest)")
+            string tex = _settings.TextureQuality ?? "";
+            string texLevel = null;
+            if (tex.Contains("0") || tex == "0") texLevel = "0";
+            else if (tex.Contains("1") || tex == "1") texLevel = "1";
+            else if (tex.Contains("2") || tex == "2") texLevel = "2";
+            else if (tex.Contains("3") || tex == "3") texLevel = "3";
+
+            if (texLevel == null)
             {
                 SetOrRemove("DFFlagTextureQualityOverrideEnabled", null);
                 SetOrRemove("DFIntTextureQualityOverride", null);
@@ -377,7 +476,7 @@ namespace NRBlox.Windows.Core
             else
             {
                 SetOrRemove("DFFlagTextureQualityOverrideEnabled", "True");
-                SetOrRemove("DFIntTextureQualityOverride", _settings.TextureQuality);
+                SetOrRemove("DFIntTextureQualityOverride", texLevel);
             }
 
             // Rendering API
@@ -387,16 +486,17 @@ namespace NRBlox.Windows.Core
             SetOrRemove("FFlagDebugGraphicsPreferOpenGL", null);
             SetOrRemove("FFlagDebugGraphicsDisableDirect3D11", null);
 
-            if (_settings.RenderingMode == "D3D11")
+            string rMode = _settings.RenderingMode ?? "";
+            if (rMode.Contains("D3D11") || rMode.Contains("Direct3D 11"))
                 SetOrRemove("FFlagDebugGraphicsPreferD3D11", "True");
-            else if (_settings.RenderingMode == "D3D10")
+            else if (rMode.Contains("D3D10") || rMode.Contains("Direct3D 10"))
                 SetOrRemove("FFlagDebugGraphicsPreferD3D11FL10", "True");
-            else if (_settings.RenderingMode == "Vulkan")
+            else if (rMode.Contains("Vulkan"))
             {
                 SetOrRemove("FFlagDebugGraphicsPreferVulkan", "True");
                 SetOrRemove("FFlagDebugGraphicsDisableDirect3D11", "True");
             }
-            else if (_settings.RenderingMode == "OpenGL")
+            else if (rMode.Contains("OpenGL"))
             {
                 SetOrRemove("FFlagDebugGraphicsPreferOpenGL", "True");
                 SetOrRemove("FFlagDebugGraphicsDisableDirect3D11", "True");
@@ -407,11 +507,12 @@ namespace NRBlox.Windows.Core
             SetOrRemove("FFlagDebugForceFutureIsBrightPhase2", null);
             SetOrRemove("FFlagDebugForceFutureIsBrightPhase3", null);
 
-            if (_settings.LightingMode == "Voxel")
+            string lMode = _settings.LightingMode ?? "";
+            if (lMode.Contains("Voxel"))
                 SetOrRemove("DFFlagDebugRenderForceTechnologyVoxel", "True");
-            else if (_settings.LightingMode == "ShadowMap")
+            else if (lMode.Contains("Shadow"))
                 SetOrRemove("FFlagDebugForceFutureIsBrightPhase2", "True");
-            else if (_settings.LightingMode == "Future")
+            else if (lMode.Contains("Future"))
                 SetOrRemove("FFlagDebugForceFutureIsBrightPhase3", "True");
 
             // PostFX & Telemetry
@@ -422,9 +523,6 @@ namespace NRBlox.Windows.Core
             SetOrRemove("FFlagDebugDisableTelemetryEventIngest", tel);
             SetOrRemove("FFlagDebugDisableTelemetryPoint", tel);
             SetOrRemove("FFlagDebugDisableTelemetryV2Counter", tel);
-
-            // MTU
-            SetOrRemove("DFIntConnectionMTUSize", _settings.MtuSize > 0 ? _settings.MtuSize.ToString() : null);
         }
 
         public void SetOrRemove(string key, string value)
@@ -481,14 +579,18 @@ namespace NRBlox.Windows.Core
             NRBloxPaths.EnsureDirectories();
             string modDir = NRBloxPaths.ModificationsDir;
 
-            // 1. Cursors (From2006 / From2013 / Default)
+            // 1. Cursors ("Default", "From 2006 (Cartoon)", "From 2013 (Angular)")
             string cursorTargetDir = Path.Combine(modDir, "content", "textures", "Cursors", "KeyboardMouse");
             string arrowDst = Path.Combine(cursorTargetDir, "ArrowCursor.png");
             string arrowFarDst = Path.Combine(cursorTargetDir, "ArrowFarCursor.png");
 
-            if (_settings.CursorType == "From2006" || _settings.CursorType == "From2013")
+            string folderKey = null;
+            if ((_settings.CursorType ?? "").Contains("2006")) folderKey = "From2006";
+            else if ((_settings.CursorType ?? "").Contains("2013")) folderKey = "From2013";
+
+            if (folderKey != null)
             {
-                string srcFolder = Path.Combine(NRBloxPaths.ModsAssetsDir, "cursors", _settings.CursorType);
+                string srcFolder = Path.Combine(NRBloxPaths.ModsAssetsDir, "cursors", folderKey);
                 CopyIfExists(Path.Combine(srcFolder, "ArrowCursor.png"), arrowDst);
                 CopyIfExists(Path.Combine(srcFolder, "ArrowFarCursor.png"), arrowFarDst);
             }

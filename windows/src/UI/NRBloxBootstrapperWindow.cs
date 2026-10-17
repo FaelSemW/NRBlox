@@ -1,5 +1,5 @@
 // ============================================================================
-// NRBlox (Windows Native Edition) — Native WPF Bootstrapper Launch Window
+// NRBlox (Windows Native Edition) — Safe Native WPF Bootstrapper Window
 // Author: FaelSemW (https://github.com/FaelSemW/NRBlox)
 // Community Discord: https://discord.gg/M8j8JnQSCx
 // License: MIT (100% Open Source)
@@ -10,7 +10,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using NRBlox.Windows.Core;
@@ -24,6 +23,7 @@ namespace NRBlox.Windows.UI
         private readonly ModEngine _mods;
         private readonly string _launchArgs;
         private readonly bool _isStudio;
+        private readonly bool _isPreviewOnly;
 
         private TextBlock _statusText;
         private TextBlock _subStatusText;
@@ -33,26 +33,25 @@ namespace NRBlox.Windows.UI
         private int _stepIndex;
         private bool _cancelled;
 
-        public NRBloxBootstrapperWindow(NRBloxSettings settings, FastFlagEngine fastFlags, ModEngine mods, string launchArgs, bool isStudio)
+        public NRBloxBootstrapperWindow(NRBloxSettings settings, FastFlagEngine fastFlags, ModEngine mods, string launchArgs, bool isStudio, bool isPreviewOnly = false)
         {
             _settings = settings;
             _fastFlags = fastFlags;
             _mods = mods;
             _launchArgs = launchArgs;
             _isStudio = isStudio;
+            _isPreviewOnly = isPreviewOnly;
 
-            Title = "NRBlox Bootstrapper";
-            Width = 500;
-            Height = 255;
+            Title = string.IsNullOrEmpty(_settings.BootstrapperTitle) ? "NRBlox" : _settings.BootstrapperTitle;
+            Width = 480;
+            Height = 240;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            WindowStyle = WindowStyle.None;
-            AllowsTransparency = true;
-            Background = Brushes.Transparent;
+            WindowStyle = WindowStyle.SingleBorderWindow;
+            AllowsTransparency = false;
             ResizeMode = ResizeMode.NoResize;
-            Topmost = true;
 
-            bool isDark = !string.Equals(_settings.ThemeMode, "Light", StringComparison.OrdinalIgnoreCase);
-            NRBloxTheme.ApplyTheme(Resources, isDark);
+            NRBloxTheme.ApplyTheme(Resources, _settings.ThemeMode);
+            SetResourceReference(Window.BackgroundProperty, "BgWindowBrush");
 
             BuildLayout();
             Loaded += OnWindowLoaded;
@@ -60,98 +59,51 @@ namespace NRBlox.Windows.UI
 
         private void BuildLayout()
         {
-            var outerBorder = new Border
-            {
-                CornerRadius = new CornerRadius(14),
-                BorderThickness = new Thickness(1.5),
-                Margin = new Thickness(10),
-                Padding = new Thickness(26, 22, 26, 22)
-            };
-            outerBorder.SetResourceReference(Border.BackgroundProperty, "BgWindowBrush");
-            outerBorder.SetResourceReference(Border.BorderBrushProperty, "BorderAccentBrush");
-            outerBorder.MouseLeftButtonDown += (s, e) =>
-            {
-                if (e.LeftButton == MouseButtonState.Pressed) DragMove();
-            };
-
-            var rootGrid = new Grid();
+            var rootGrid = new Grid { Margin = new Thickness(24, 20, 24, 18) };
             rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             rootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            // Row 0: Brand Header + Badge
-            var headerGrid = new Grid();
-            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
+            // Row 0: Brand Header
             var brandStack = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            var logoBadge = new Border
-            {
-                Width = 34,
-                Height = 34,
-                CornerRadius = new CornerRadius(8),
-                Margin = new Thickness(0, 0, 12, 0),
-                Child = new TextBlock
-                {
-                    Text = "⚡",
-                    FontSize = 18,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center
-                }
-            };
-            logoBadge.SetResourceReference(Border.BackgroundProperty, "AccentPrimaryBrush");
-            brandStack.Children.Add(logoBadge);
+            var logo = NRBloxTheme.CreateNRBloxLogo(32);
+            logo.Margin = new Thickness(0, 0, 14, 0);
+            brandStack.Children.Add(logo);
 
-            var titleStack = new StackPanel();
-            titleStack.Children.Add(NRBloxTheme.CreateText("NRBLOX ENGINE", 17, FontWeights.ExtraBold, "TextPrimaryBrush"));
-            titleStack.Children.Add(NRBloxTheme.CreateText(_settings.BootstrapperStyle ?? "NRBlox Cyber Glass", 11, FontWeights.Medium, "AccentPrimaryBrush"));
+            var titleStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            titleStack.Children.Add(NRBloxTheme.CreateText(Title, 17, FontWeights.SemiBold, "TextPrimaryBrush"));
+            titleStack.Children.Add(NRBloxTheme.CreateText("Style: " + (_settings.BootstrapperStyle ?? "NRBlox"), 11.5, FontWeights.Normal, "TextSecondaryBrush"));
             brandStack.Children.Add(titleStack);
 
-            Grid.SetColumn(brandStack, 0);
-            headerGrid.Children.Add(brandStack);
+            Grid.SetRow(brandStack, 0);
+            rootGrid.Children.Add(brandStack);
 
-            var channelBadge = new Border
-            {
-                CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(10, 4, 10, 4),
-                BorderThickness = new Thickness(1),
-                VerticalAlignment = VerticalAlignment.Center,
-                Child = NRBloxTheme.CreateText("CANAL: " + (_settings.Channel ?? "production").ToUpperInvariant(), 10.5, FontWeights.Bold, "TextSecondaryBrush")
-            };
-            channelBadge.SetResourceReference(Border.BackgroundProperty, "BgCardBrush");
-            channelBadge.SetResourceReference(Border.BorderBrushProperty, "BorderSubtleBrush");
-            Grid.SetColumn(channelBadge, 1);
-            headerGrid.Children.Add(channelBadge);
-
-            Grid.SetRow(headerGrid, 0);
-            rootGrid.Children.Add(headerGrid);
-
-            // Row 1: Status texts
-            var statusStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 16, 0, 12) };
-            _statusText = NRBloxTheme.CreateText("Inicializando cliente Roblox...", 14.5, FontWeights.SemiBold, "TextPrimaryBrush");
-            _subStatusText = NRBloxTheme.CreateText("Preparando FastFlags e verificando integridade da versão...", 12, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 4, 0, 0));
+            // Row 1: Status
+            var statusStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 12, 0, 10) };
+            _statusText = NRBloxTheme.CreateText(_isPreviewOnly ? "Bootstrapper Preview Mode" : "Starting Roblox...", 14, FontWeights.Normal, "TextPrimaryBrush");
+            _subStatusText = NRBloxTheme.CreateText("Applying FastFlags and client modifications...", 12, FontWeights.Normal, "TextSecondaryBrush", new Thickness(0, 3, 0, 0));
             statusStack.Children.Add(_statusText);
             statusStack.Children.Add(_subStatusText);
             Grid.SetRow(statusStack, 1);
             rootGrid.Children.Add(statusStack);
 
-            // Row 2: Custom Progress Bar
+            // Row 2: Progress Bar
             _progressTrack = new Border
             {
-                Height = 10,
-                CornerRadius = new CornerRadius(5),
-                Margin = new Thickness(0, 0, 0, 16),
+                Height = 6,
+                CornerRadius = new CornerRadius(3),
+                Margin = new Thickness(0, 0, 0, 14),
                 ClipToBounds = true
             };
-            _progressTrack.SetResourceReference(Border.BackgroundProperty, "BgCardBrush");
+            _progressTrack.SetResourceReference(Border.BackgroundProperty, "BorderSubtleBrush");
 
             _progressFill = new Border
             {
                 HorizontalAlignment = HorizontalAlignment.Left,
-                Width = 30,
-                Height = 10,
-                CornerRadius = new CornerRadius(5)
+                Width = _isPreviewOnly ? 220 : 40,
+                Height = 6,
+                CornerRadius = new CornerRadius(3)
             };
             _progressFill.SetResourceReference(Border.BackgroundProperty, "AccentPrimaryBrush");
             _progressTrack.Child = _progressFill;
@@ -159,44 +111,44 @@ namespace NRBlox.Windows.UI
             Grid.SetRow(_progressTrack, 2);
             rootGrid.Children.Add(_progressTrack);
 
-            // Row 3: Footer with Version & Cancel button
+            // Row 3: Cancel Button
             var footerGrid = new Grid();
             footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            var verLabel = NRBloxTheme.CreateText(NRBloxPaths.TargetVersionGuid, 11.5, FontWeights.Medium, "TextMutedBrush");
+            var verLabel = NRBloxTheme.CreateText(NRBloxPaths.TargetVersionGuid, 11.5, FontWeights.Normal, "TextSecondaryBrush");
             verLabel.VerticalAlignment = VerticalAlignment.Center;
             Grid.SetColumn(verLabel, 0);
             footerGrid.Children.Add(verLabel);
 
-            var cancelBtn = NRBloxTheme.CreateStyledButton("Cancelar", false, (s, e) =>
+            var cancelBtn = NRBloxTheme.CreateStyledButton("Cancel", false, (s, e) =>
             {
                 _cancelled = true;
                 if (_stepTimer != null) _stepTimer.Stop();
                 Close();
             });
-            cancelBtn.Padding = new Thickness(14, 5, 14, 5);
             Grid.SetColumn(cancelBtn, 1);
             footerGrid.Children.Add(cancelBtn);
 
             Grid.SetRow(footerGrid, 3);
             rootGrid.Children.Add(footerGrid);
 
-            outerBorder.Child = rootGrid;
-            Content = outerBorder;
+            Content = rootGrid;
         }
 
         private void OnWindowLoaded(object sender, RoutedEventArgs e)
         {
+            if (_isPreviewOnly) return;
+
             _stepIndex = 0;
-            _stepTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(260) };
+            _stepTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(220) };
             _stepTimer.Tick += OnStepTick;
             _stepTimer.Start();
         }
 
         private void SetProgress(double ratio, string status, string sub)
         {
-            double maxW = _progressTrack.ActualWidth > 0 ? _progressTrack.ActualWidth : 420;
+            double maxW = _progressTrack.ActualWidth > 0 ? _progressTrack.ActualWidth : 410;
             _progressFill.Width = Math.Max(16, maxW * Math.Min(1.0, Math.Max(0.0, ratio)));
             _statusText.Text = status;
             _subStatusText.Text = sub;
@@ -209,26 +161,23 @@ namespace NRBlox.Windows.UI
 
             if (_stepIndex == 1)
             {
-                SetProgress(0.25, "Verificando instalação do Roblox...", "Validando AppSettings.xml e binários em " + NRBloxPaths.TargetVersionGuid);
+                SetProgress(0.30, "Verifying client installation...", "Checking " + NRBloxPaths.TargetVersionGuid);
                 SystemIntegrationService.VerifyClientInstallation();
             }
             else if (_stepIndex == 2)
             {
-                SetProgress(0.55, "Sincronizando FastFlags...", string.Format("Injetando {0} flags ativas em ClientAppSettings.json (FPS: {1})", _fastFlags.Flags.Count, _settings.TargetFps));
+                SetProgress(0.65, "Applying Engine Settings & FastFlags...", string.Format("Syncing {0} FastFlags to ClientAppSettings.json", _fastFlags.Flags.Count));
                 _fastFlags.ApplySettingsToFlags();
                 _fastFlags.SaveAndSync();
             }
             else if (_stepIndex == 3)
             {
-                SetProgress(0.80, "Aplicando Mods e Integrações...", "Sincronizando cursores, sons e verificando Multi-Instance Mutex...");
+                SetProgress(0.90, "Applying Mods & Integrations...", "Synchronizing client modifications...");
                 _mods.ApplyAndSyncMods();
-                SystemIntegrationService.SetMultiInstanceMutex(_settings.MultiInstanceLaunching);
+                if (_settings.MultiInstanceLaunching)
+                    SystemIntegrationService.SetMultiInstanceMutex(true);
             }
-            else if (_stepIndex == 4)
-            {
-                SetProgress(1.0, "Iniciando Roblox...", "Executando cliente nativo...");
-            }
-            else if (_stepIndex >= 5)
+            else if (_stepIndex >= 4)
             {
                 _stepTimer.Stop();
                 ExecuteRobloxProcess();
@@ -245,8 +194,8 @@ namespace NRBlox.Windows.UI
             if (!File.Exists(targetExe))
             {
                 MessageBox.Show(
-                    "Não foi possível localizar o executável do cliente em:\n" + targetExe,
-                    "NRBlox — Executável não encontrado",
+                    "Could not find Roblox client executable at:\n" + targetExe,
+                    "NRBlox",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning
                 );
@@ -255,6 +204,21 @@ namespace NRBlox.Windows.UI
 
             try
             {
+                if (_settings.ConfirmLaunches)
+                {
+                    Process[] existing = Process.GetProcessesByName("RobloxPlayerBeta");
+                    if (existing != null && existing.Length > 0)
+                    {
+                        var res = MessageBox.Show(
+                            "Roblox is already running. Are you sure you want to launch another instance?",
+                            "NRBlox",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Question
+                        );
+                        if (res != MessageBoxResult.Yes) return;
+                    }
+                }
+
                 var psi = new ProcessStartInfo
                 {
                     FileName = targetExe,
@@ -264,14 +228,22 @@ namespace NRBlox.Windows.UI
                 };
                 Process.Start(psi);
 
-                // Launch any configured custom integrations
-                if (_settings.CustomIntegrations != null)
+                // Launch custom integrations
+                if (_settings.CustomIntegrationItems != null)
                 {
-                    foreach (string customExe in _settings.CustomIntegrations)
+                    foreach (var item in _settings.CustomIntegrationItems)
                     {
-                        if (!string.IsNullOrEmpty(customExe) && File.Exists(customExe))
+                        if (!string.IsNullOrEmpty(item.Location) && File.Exists(item.Location))
                         {
-                            try { Process.Start(new ProcessStartInfo { FileName = customExe, UseShellExecute = true }); }
+                            try
+                            {
+                                Process.Start(new ProcessStartInfo
+                                {
+                                    FileName = item.Location,
+                                    Arguments = item.LaunchArgs ?? "",
+                                    UseShellExecute = true
+                                });
+                            }
                             catch { }
                         }
                     }
@@ -279,7 +251,7 @@ namespace NRBlox.Windows.UI
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Erro ao iniciar o Roblox:\n" + ex.Message, "NRBlox", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Error launching Roblox:\n" + ex.Message, "NRBlox", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }

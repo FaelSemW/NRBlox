@@ -21,6 +21,7 @@ $Sources = @(
     (Join-Path $PSScriptRoot "src\Core\NRBloxServices.cs"),
     (Join-Path $PSScriptRoot "src\UI\NRBloxTheme.cs"),
     (Join-Path $PSScriptRoot "src\UI\NRBloxBootstrapperWindow.cs"),
+    (Join-Path $PSScriptRoot "src\UI\NRBloxMenuWindow.cs"),
     (Join-Path $PSScriptRoot "src\UI\NRBloxMainWindow.cs"),
     (Join-Path $PSScriptRoot "src\Program.cs")
 )
