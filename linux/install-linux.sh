@@ -28,11 +28,17 @@ echo "  GitHub: https://github.com/FaelSemW/NRBlox"
 echo "  Discord: https://discord.gg/M8j8JnQSCx"
 echo "============================================================"
 
-# 1. Install native Linux dependencies (even if third-party apt repos like Chrome have GPG warnings)
+# 1. Install native Linux dependencies (skip on immutable distros like Bazzite/SteamOS where python3 & flatpak are built-in)
 install_deps() {
+    if [ -f /run/ostree-booted ] || command -v rpm-ostree >/dev/null 2>&1; then
+        echo "[NRBlox-CLI] Sistema imutável (Bazzite / Fedora Atomic) detectado — usando Python3 e Flatpak nativos!"
+        return 0
+    fi
+    if python3 -c "import tkinter" >/dev/null 2>&1 && command -v gcc >/dev/null 2>&1 && command -v flatpak >/dev/null 2>&1; then
+        return 0
+    fi
     echo "[NRBlox-CLI] Instalando dependências nativas do Linux (python3-tk, gcc, wine64, flatpak, xdg-utils)..."
     if command -v apt-get >/dev/null 2>&1; then
-        # Ignore GPG errors from unrelated third-party repos (e.g., dl.google.com/linux/chrome)
         ${SUDO} apt-get update -o Acquire::AllowInsecureRepositories=true >/dev/null 2>&1 || true
         DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y python3 python3-tk gcc g++-mingw-w64-x86-64 wine64 flatpak curl xdg-utils || \
         DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y python3 python3-tk gcc wine64 flatpak curl xdg-utils || \

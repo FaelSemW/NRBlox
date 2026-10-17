@@ -1011,6 +1011,128 @@ def run_interactive_cli(ctrl: LinuxEngineController):
             break
 
 
+def run_local_app_window(ctrl: LinuxEngineController):
+    """Zero-dependency graphical window fallback for immutable distros (Bazzite / SteamOS / Fedora Atomic)"""
+    import http.server
+    import urllib.parse
+
+    html_page = """<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>NRBlox</title>
+<style>
+  body { margin:0; font-family: system-ui, -apple-system, sans-serif; background:#F8F9FA; color:#1B1B1B; user-select:none; }
+  body.dark { background:#1F1F1F; color:#FFFFFF; }
+  .menu-wrap { display:flex; padding:28px; height:calc(100vh - 56px); box-sizing:border-box; align-items:center; }
+  .left-col { width:230px; text-align:center; padding-right:20px; }
+  .logo { font-size:28px; font-weight:600; margin-bottom:4px; }
+  .ver { font-size:13px; color:#6B6B6B; margin-bottom:24px; }
+  .link { display:block; color:#0067C0; text-decoration:none; margin:8px 0; font-size:13.5px; cursor:pointer; }
+  .right-col { flex:1; display:flex; flex-direction:column; gap:10px; }
+  .card { background:#FFFFFF; border:1px solid #E3E5E8; border-radius:6px; padding:14px 18px; display:flex; align-items:center; cursor:pointer; transition:0.12s; }
+  body.dark .card { background:#2B2B2B; border-color:#3A3A3A; }
+  .card:hover { border-color:#0067C0; }
+  .card-icon { font-size:18px; margin-right:14px; }
+  .card-text { flex:1; }
+  .card-title { font-size:14.5px; font-weight:500; }
+  .card-sub { font-size:12px; color:#6B6B6B; margin-top:2px; }
+  .chev { font-size:18px; color:#6B6B6B; }
+  #status { margin-top:10px; font-size:12.5px; color:#0067C0; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="menu-wrap">
+  <div class="left-col">
+    <div class="logo">❖ NRBlox</div>
+    <div class="ver">Version 3.0.0</div>
+    <a class="link" onclick="act('theme')">🖌 Switch Light / Dark Mode</a>
+    <a class="link" href="https://github.com/FaelSemW/NRBlox/blob/main/docs/wiki/Home.md" target="_blank">📖 NRBlox Wiki</a>
+    <a class="link" href="https://discord.gg/M8j8JnQSCx" target="_blank">💬 NRBlox Community</a>
+  </div>
+  <div class="right-col">
+    <div class="card" onclick="act('player')">
+      <div class="card-icon">➔</div>
+      <div class="card-text"><div class="card-title">Launch Roblox</div></div>
+      <div class="chev">›</div>
+    </div>
+    <div class="card" onclick="act('studio')">
+      <div class="card-icon">🔧</div>
+      <div class="card-text"><div class="card-title">Launch Roblox Studio</div></div>
+      <div class="chev">›</div>
+    </div>
+    <div class="card" onclick="act('fps')">
+      <div class="card-icon">⚙️</div>
+      <div class="card-text"><div class="card-title">Configure FastFlags (240 FPS + Vulkan)</div><div class="card-sub">Syncs ClientAppSettings.json & Linux ELF runtime</div></div>
+      <div class="chev">›</div>
+    </div>
+    <div class="card" onclick="window.open('https://github.com/FaelSemW/NRBlox/blob/main/docs/wiki/Home.md')">
+      <div class="card-icon">📓</div>
+      <div class="card-text"><div class="card-title">Having an issue?</div><div class="card-sub">See the Wiki for help</div></div>
+      <div class="chev">›</div>
+    </div>
+    <div id="status"></div>
+  </div>
+</div>
+<script>
+function act(cmd) {
+  if (cmd === 'theme') { document.body.classList.toggle('dark'); return; }
+  document.getElementById('status').innerText = 'Starting NRBlox Bootstrapper (' + cmd + ')...';
+  fetch('/action?cmd=' + cmd).then(r => r.text()).then(t => {
+    document.getElementById('status').innerText = t;
+  });
+}
+</script>
+</body>
+</html>"""
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, format, *args):
+            pass
+
+        def do_GET(self):
+            if self.path.startswith("/action"):
+                qs = urllib.parse. parse_qs(urllib.parse.urlparse(self.path).query)
+                cmd = qs.get("cmd", [""])[0]
+                msg = "Done."
+                if cmd in ("player", "studio"):
+                    is_st = cmd == "studio"
+                    guid = RobloxLinuxCdnInstaller.resolve_version_guid(is_st, False)
+                    if not RobloxLinuxCdnInstaller.is_installed(guid, is_st) and (is_st or not ctrl.has_bionic_elf_runtime()):
+                        RobloxLinuxCdnInstaller.install_or_update(guid)
+                    ok, msg = ctrl.launch_installed_client(guid, is_studio=is_st)
+                elif cmd == "fps":
+                    ctrl.save_settings()
+                    msg = "Synced 240 FPS + Vulkan FastFlags!"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(msg.encode("utf-8"))
+                return
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(html_page.encode("utf-8"))
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    port = server.server_port
+    url = f"http://127.0.0.1:{port}"
+    print(f"[NRBlox-Linux] Opening NRBlox Desktop Window at {url}...")
+    opened = False
+    for browser in ["google-chrome", "chromium", "brave-browser", "microsoft-edge", "epiphany"]:
+        if shutil.which(browser):
+            subprocess.Popen([browser, f"--app={url}", "--window-size=640,380"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            opened = True
+            break
+    if not opened:
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+
 def main():
     auto_detect_x11_display()
     ctrl = LinuxEngineController()
@@ -1053,13 +1175,19 @@ def main():
     elif "-settings" in args or "--settings" in args:
         initial_mode = "settings"
 
-    if HAS_TK and (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+    if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
+        if HAS_TK:
+            try:
+                app = NRBloxLinuxApp(ctrl, initial_mode=initial_mode, launch_uri=uri)
+                app.run()
+                return 0
+            except Exception as e:
+                print(f"[NRBlox-Linux] Tkinter unavailable ({e}), falling back to desktop app window...")
         try:
-            app = NRBloxLinuxApp(ctrl, initial_mode=initial_mode, launch_uri=uri)
-            app.run()
+            run_local_app_window(ctrl)
             return 0
-        except Exception as e:
-            print(f"[NRBlox-Linux] GUI display unavailable ({e}), opening interactive terminal launcher...")
+        except Exception:
+            pass
 
     run_interactive_cli(ctrl)
     return 0
