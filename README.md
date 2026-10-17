@@ -41,18 +41,15 @@ Toda a documentação detalhada está disponível diretamente na nossa **Wiki no
    powershell -ExecutionPolicy Bypass -File .\windows\build-windows.ps1
    ```
 
-### 🐧 No Linux (`nrblox-linux`)
-1. Execute diretamente o launcher nativo para Linux:
-   ```bash
-   chmod +x linux/nrblox-linux
-   ./linux/nrblox-linux
-   ```
-2. Ou instale no sistema com integração completa de menu e protocolos `roblox-player://` (XDG):
-   ```bash
-   cd linux
-   chmod +x install-linux.sh
-   ./install-linux.sh
-   ```
+### 🐧 No Linux (Instalação Completa em 1 Comando via CLI)
+Basta colar o comando abaixo no terminal. Ele instala automaticamente as dependências (`python3-tk`, `flatpak`, `xdg-utils`), configura o runtime **Sober (`org.vinegarhq.Sober`)**, registra os protocolos `roblox-player://` no sistema, cria o comando global `nrblox` e **já abre o launcher na tela com o mesmo layout do Windows**:
+```bash
+curl -fsSL https://raw.githubusercontent.com/FaelSemW/NRBlox/main/linux/install-linux.sh | bash
+```
+Depois de instalado, você pode abrir a qualquer momento pelo menu de aplicativos do sistema ou digitando no terminal:
+```bash
+nrblox
+```
 
 ---
 

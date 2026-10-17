@@ -34,22 +34,22 @@ powershell -ExecutionPolicy Bypass -File .\windows\build-windows.ps1
 
 ---
 
-## 🐧 2. Instalação e Uso no Linux (`nrblox-linux`)
+## 🐧 2. Instalação e Uso no Linux (Via CLI em 1 Comando)
 
-O launcher Linux (`linux/nrblox-linux`) é uma aplicação nativa desenvolvida especificamente para distribuições Linux (**X11 e Wayland**), integrando-se diretamente com **Sober (Flatpak)**, **Vinegar** e **Wine64 / Proton-GE**.
+No Linux (**X11 e Wayland**), a instalação é feita diretamente via **CLI** com um único comando no terminal. Ele configura tudo sozinho e já abre a janela do launcher (com o mesmo layout de 2 janelas do Windows + janela de Bootstrapper):
 
-### Instalação Automática (XDG Desktop + MIME Protocols)
 ```bash
-cd linux
-chmod +x install-linux.sh nrblox-linux
-./install-linux.sh
+curl -fsSL https://raw.githubusercontent.com/FaelSemW/NRBlox/main/linux/install-linux.sh | bash
 ```
-O instalador:
-1. Copia o motor do NRBlox Linux para `~/.local/share/nrblox-linux`.
-2. Cria o comando global `~/.local/bin/nrblox-linux`.
-3. Registra o arquivo `.desktop` em `~/.local/share/applications/nrblox-linux.desktop` e associa os protocolos `x-scheme-handler/roblox-player`, `x-scheme-handler/roblox` e `x-scheme-handler/nrblox` via `xdg-mime`.
+
+### O que o instalador CLI faz automaticamente:
+1. Detecta sua distribuição (`apt`, `pacman`, `dnf` ou `zypper`) e garante que `python3`, `python3-tk`, `curl`, `flatpak` e `xdg-utils` estejam instalados.
+2. Configura o repositório Flathub e instala automaticamente o runtime **Sober (`org.vinegarhq.Sober`)** caso ainda não esteja presente.
+3. Baixa o motor do NRBlox Linux para `~/.local/share/nrblox-linux` e cria os comandos globais `nrblox` e `nrblox-linux` em `~/.local/bin`.
+4. Cria o atalho no menu de aplicativos (`~/.local/share/applications/nrblox-linux.desktop`) e na Área de Trabalho, registrando os protocolos `roblox-player://`, `roblox://` e `nrblox://` via `xdg-mime`.
+5. **Abre automaticamente a janela do NRBlox** assim que a instalação termina!
 
 ### Runners Suportados no Linux
-- **Sober (`org.vinegarhq.Sober` via Flatpak)**: Recomendado para máxima performance em jogos. O NRBlox sincroniza automaticamente suas FastFlags em `~/.var/app/org.vinegarhq.Sober/config/sober/config.json`.
+- **Sober (`org.vinegarhq.Sober` via Flatpak)**: Instalado e sincronizado automaticamente (`~/.var/app/org.vinegarhq.Sober/config/sober/config.json`).
 - **Vinegar**: Suporte completo para Player e Roblox Studio via Wine-GE.
-- **Prefixo Wine64 / Proton Customizado**: Permite rodar diretamente a pasta `version-11f155f3450f4c8e` com `WINEESYNC=1`, `WINEFSYNC=1`, `gamemoderun` e `mangohud`.
+- **Prefixo Wine64 / Proton Customizado**: Suporte a `WINEESYNC=1`, `WINEFSYNC=1`, `gamemoderun` e `mangohud`.

@@ -206,6 +206,22 @@ class LinuxEngineController:
             wrappers.extend(["mangohud", "--dlsym"])
 
         runners = self.detect_installed_runners()
+        if not runners["sober_flatpak"] and not runners["vinegar"] and shutil.which("flatpak"):
+            try:
+                subprocess.run(
+                    ["flatpak", "remote-add", "--user", "--if-not-exists", "flathub", "https://dl.flathub.org/repo/flathub.flatpakrepo"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                subprocess.run(
+                    ["flatpak", "install", "--user", "-y", "flathub", "org.vinegarhq.Sober"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                runners = self.detect_installed_runners()
+            except Exception:
+                pass
+
         cmd = None
         if runners["sober_flatpak"] and mode == "player":
             cmd = wrappers + ["flatpak", "run", "org.vinegarhq.Sober"]
@@ -221,7 +237,7 @@ class LinuxEngineController:
             cmd = wrappers + [wine_bin, exe_name, uri or "--app"]
 
         if not cmd:
-            return False, "No Linux runner found (install Sober via Flatpak, Vinegar, or Wine64)."
+            return False, "No Linux runner found (run install-linux.sh to auto-install Sober/Flatpak or Wine64)."
 
         try:
             subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -497,9 +513,52 @@ class NRBloxLinuxApp:
             self.root.destroy()
 
     def launch_client(self, mode):
-        ok, msg = self.ctrl.launch_roblox(mode=mode)
-        if not ok:
-            messagebox.showwarning("NRBlox Linux", msg)
+        for w in self.root.winfo_children():
+            w.destroy()
+        p = self.get_palette()
+        self.root.title(self.ctrl.settings.get("bootstrapper_title", "NRBlox"))
+        self.root.geometry("480x230")
+        self.root.configure(bg=p["bg_window"])
+
+        box = tk.Frame(self.root, bg=p["bg_window"], padx=24, pady=20)
+        box.pack(fill="both", expand=True)
+
+        tk.Label(box, text="❖  " + self.ctrl.settings.get("bootstrapper_title", "NRBlox"), bg=p["bg_window"], fg=p["text_primary"], font=("Sans", 15, "bold"), anchor="w").pack(fill="x")
+        status_lbl = tk.Label(box, text="Starting Roblox...", bg=p["bg_window"], fg=p["text_primary"], font=("Sans", 11), anchor="w")
+        status_lbl.pack(fill="x", pady=(16, 2))
+        sub_lbl = tk.Label(box, text="Verifying Linux runner and syncing FastFlags...", bg=p["bg_window"], fg=p["text_secondary"], font=("Sans", 9), anchor="w")
+        sub_lbl.pack(fill="x", pady=(0, 14))
+
+        track = tk.Frame(box, bg=p["border"], height=6)
+        track.pack(fill="x", pady=(0, 16))
+        track.pack_propagate(False)
+        fill = tk.Frame(track, bg=p["accent"], width=80, height=6)
+        fill.pack(side="left")
+
+        footer = tk.Frame(box, bg=p["bg_window"])
+        footer.pack(fill="x", side="bottom")
+        tk.Label(footer, text=TARGET_VERSION_GUID, bg=p["bg_window"], fg=p["text_secondary"], font=("Sans", 9)).pack(side="left")
+        tk.Button(footer, text="Cancel", bg=p["bg_card"], fg=p["text_primary"], relief="flat", padx=14, pady=4, command=self.root.destroy).pack(side="right")
+
+        def step1():
+            fill.configure(width=200)
+            status_lbl.configure(text="Applying Engine Settings & FastFlags...")
+            sub_lbl.configure(text=f"Syncing {len(self.ctrl.fflags)} FastFlags to Sober & Wine...")
+            self.root.after(260, step2)
+
+        def step2():
+            fill.configure(width=360)
+            status_lbl.configure(text="Launching Roblox...")
+            sub_lbl.configure(text="Starting Linux graphics pipeline...")
+            self.root.after(220, finish)
+
+        def finish():
+            ok, msg = self.ctrl.launch_roblox(mode=mode)
+            if not ok:
+                messagebox.showwarning("NRBlox Linux", msg)
+            self.root.destroy()
+
+        self.root.after(220, step1)
 
     def run(self):
         self.root.mainloop()
