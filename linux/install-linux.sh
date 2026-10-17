@@ -28,16 +28,38 @@ echo "  GitHub: https://github.com/FaelSemW/NRBlox"
 echo "  Discord: https://discord.gg/M8j8JnQSCx"
 echo "============================================================"
 
+# Clean up any stuck Wine configuration popups from previous runs
+pkill -9 -f wine 2>/dev/null || true
+
+# 0. On Live RAM systems (Slax), mount the 32GB virtual disk (/dev/sda) if available so disk never fills up
+if [ -d /run/initramfs/memory ] && [ -b /dev/sda ] && [ "$(id -u)" -eq 0 ]; then
+    mkdir -p /mnt/nrblox-disk
+    if ! mountpoint -q /mnt/nrblox-disk 2>/dev/null; then
+        if ! blkid /dev/sda >/dev/null 2>&1; then
+            echo "[NRBlox-CLI] Formatando disco virtual de 32 GB (/dev/sda) para armazenamento nativo..."
+            mkfs.ext4 -F -q /dev/sda >/dev/null 2>&1 || true
+        fi
+        mount /dev/sda /mnt/nrblox-disk 2>/dev/null || true
+    fi
+    if mountpoint -q /mnt/nrblox-disk 2>/dev/null; then
+        mkdir -p /mnt/nrblox-disk/nrblox-linux "${HOME}/.local/share"
+        if [ ! -L "${INSTALL_DIR}" ]; then
+            rm -rf "${INSTALL_DIR}" 2>/dev/null || true
+            ln -s /mnt/nrblox-disk/nrblox-linux "${INSTALL_DIR}"
+        fi
+    fi
+fi
+
 # 1. Install native Linux dependencies (skip on immutable distros like Bazzite/SteamOS where python3 & flatpak are built-in)
 install_deps() {
     if [ -f /run/ostree-booted ] || command -v rpm-ostree >/dev/null 2>&1; then
         echo "[NRBlox-CLI] Sistema imutável (Bazzite / Fedora Atomic) detectado — usando Python3 e Flatpak nativos!"
         return 0
     fi
-    if python3 -c "import tkinter" >/dev/null 2>&1 && command -v gcc >/dev/null 2>&1 && command -v flatpak >/dev/null 2>&1; then
+    if python3 -c "import tkinter" >/dev/null 2>&1 && command -v gcc >/dev/null 2>&1 && [ -f /usr/include/stdio.h ] && command -v flatpak >/dev/null 2>&1; then
         return 0
     fi
-    echo "[NRBlox-CLI] Instalando dependências nativas do Linux (python3-tk, gcc, curl, xdg-utils)..."
+    echo "[NRBlox-CLI] Instalando dependências nativas do Linux (python3-tk, gcc, libc6-dev, curl, xdg-utils)..."
     if command -v apt-get >/dev/null 2>&1; then
         ${SUDO} apt-get update -o Acquire::AllowInsecureRepositories=true >/dev/null 2>&1 || true
         if [ -d /run/initramfs/memory ] || grep -q "slax" /etc/os-release 2>/dev/null || [ "$(hostname 2>/dev/null)" = "slax" ]; then
@@ -51,9 +73,9 @@ install_deps() {
     elif command -v pacman >/dev/null 2>&1; then
         ${SUDO} pacman -Sy --noconfirm python tk gcc mingw-w64-gcc wine flatpak curl xdg-utils || true
     elif command -v dnf >/dev/null 2>&1; then
-        ${SUDO} dnf install -y python3 python3-tkinter gcc mingw64-gcc-c++ wine flatpak curl xdg-utils || true
+        ${SUDO} dnf install -y python3 python3-tkinter gcc glibc-devel mingw64-gcc-c++ wine flatpak curl xdg-utils || true
     elif command -v zypper >/dev/null 2>&1; then
-        ${SUDO} zypper install -y python3 python3-tk gcc cross-x86_64-w64-mingw32-gcc-c++ wine flatpak curl xdg-utils || true
+        ${SUDO} zypper install -y python3 python3-tk gcc glibc-devel cross-x86_64-w64-mingw32-gcc-c++ wine flatpak curl xdg-utils || true
     fi
 }
 

@@ -418,36 +418,40 @@ class LinuxEngineController:
                     pass
 
     def prepare_native_prefix(self, on_status=None):
-        """Initializes and normalizes the isolated NRBlox Linux prefix without hanging"""
+        """Initializes and normalizes the isolated NRBlox Linux prefix headlessly without blocking dialogs"""
         env = os.environ.copy()
         env["WINEPREFIX"] = str(LinuxPaths.NATIVE_PREFIX)
         env["WINEARCH"] = "win64"
         env["WINEDEBUG"] = "-all"
         env["WINEDLLOVERRIDES"] = "mscoree,mshtml="
+        # Prevent wineboot from popping up the blocking "The Wine configuration is being updated..." X11 window
+        env.pop("DISPLAY", None)
+        env.pop("WAYLAND_DISPLAY", None)
 
         system_reg = LinuxPaths.NATIVE_PREFIX / "system.reg"
         if not system_reg.exists() and shutil.which("wineboot"):
             if on_status:
-                on_status("Initializing NRBlox Linux prefix (first run)...")
+                on_status("Initializing NRBlox Linux prefix (headless)...")
             try:
                 subprocess.run(
-                    ["wineboot", "-u"],
+                    ["wineboot", "-i"],
                     env=env,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    timeout=45,
+                    timeout=18,
                 )
             except Exception:
-                pass
+                subprocess.run(["pkill", "-9", "-f", "wineboot"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-        if self.settings.get("enable_ntdll_cloak", True) and shutil.which("wine64"):
+        wine_bin = self.find_wine_binary()
+        if self.settings.get("enable_ntdll_cloak", True) and wine_bin and system_reg.exists():
             try:
                 subprocess.run(
-                    ["wine64", "reg", "add", r"HKLM\Software\Microsoft\Windows NT\CurrentVersion", "/v", "CurrentBuild", "/d", "19045", "/f"],
+                    [wine_bin, "reg", "add", r"HKLM\Software\Microsoft\Windows NT\CurrentVersion", "/v", "CurrentBuild", "/d", "19045", "/f"],
                     env=env,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    timeout=15,
+                    timeout=8,
                 )
             except Exception:
                 pass
@@ -537,15 +541,27 @@ class LinuxEngineController:
                 return False, f"Linux Bionic ELF runtime exited (code {proc.returncode}):\n{err_txt}"
             return True, "Launched via NRBlox Linux ELF Backend"
 
-        # Otherwise run via NRBlox Native Prefix + nrblox-core (Wine64)
-        self.prepare_native_prefix(on_status=on_status)
-
         vdir = LinuxPaths.VERSIONS_DIR / version_guid
         exe_name = "RobloxStudioBeta.exe" if is_studio else "RobloxPlayerBeta.exe"
         target_exe = vdir / exe_name
 
         if not target_exe.exists():
             return False, f"Executable not found at: {target_exe}"
+
+        # If launching Roblox Player (with Hyperion RobloxPlayerBeta.dll) and Bionic ELF runtime is unavailable,
+        # do not hang inside Wine's "The Wine configuration is being updated..." popup because Hyperion blocks Wine.
+        if not is_studio and (vdir / "RobloxPlayerBeta.dll").exists():
+            subprocess.run(["pkill", "-9", "-f", "wine"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return (
+                False,
+                f"✅ Cliente Roblox ({version_guid}) e FastFlags (ClientAppSettings.json) instalados e sincronizados com sucesso pelo NRBlox!\n\n"
+                "⚠️ Por que a janela 3D não abriu neste modo Live (root/Wine):\n"
+                "• O binário Windows (RobloxPlayerBeta.dll / Hyperion) possui a seção .text criptografada e bloqueia o Wine no Linux.\n"
+                "• O motor ELF Linux (Flatpak) exige um usuário não-root em disco persistente (como na sua VM 'Cloud Game - Bazzite Lab').",
+            )
+
+        # Otherwise run via NRBlox Native Prefix + nrblox-core (Wine64, e.g. for Roblox Studio)
+        self.prepare_native_prefix(on_status=on_status)
 
         env = os.environ.copy()
         env["WINEPREFIX"] = str(LinuxPaths.NATIVE_PREFIX)
