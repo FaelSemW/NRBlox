@@ -53,12 +53,16 @@ int main(int argc, char** argv) {
     const char* target_exe = argv[1];
     const char* target_arg = (argc >= 3) ? argv[2] : "--app";
 
-    /* Locate wine64 or wine */
+    /* Locate wine64 or wine (including Debian /usr/lib/wine paths) */
     const char* wine_bin = "wine64";
     if (access("/usr/bin/wine64", X_OK) == 0) {
         wine_bin = "/usr/bin/wine64";
+    } else if (access("/usr/lib/wine/wine64", X_OK) == 0) {
+        wine_bin = "/usr/lib/wine/wine64";
     } else if (access("/usr/bin/wine", X_OK) == 0) {
         wine_bin = "/usr/bin/wine";
+    } else if (access("/usr/lib/wine/wine", X_OK) == 0) {
+        wine_bin = "/usr/lib/wine/wine";
     }
 
     char* exec_args[5];

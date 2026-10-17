@@ -37,12 +37,17 @@ install_deps() {
     if python3 -c "import tkinter" >/dev/null 2>&1 && command -v gcc >/dev/null 2>&1 && command -v flatpak >/dev/null 2>&1; then
         return 0
     fi
-    echo "[NRBlox-CLI] Instalando dependências nativas do Linux (python3-tk, gcc, wine64, flatpak, xdg-utils)..."
+    echo "[NRBlox-CLI] Instalando dependências nativas do Linux (python3-tk, gcc, curl, xdg-utils)..."
     if command -v apt-get >/dev/null 2>&1; then
         ${SUDO} apt-get update -o Acquire::AllowInsecureRepositories=true >/dev/null 2>&1 || true
-        DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y python3 python3-tk gcc g++-mingw-w64-x86-64 wine64 flatpak curl xdg-utils || \
-        DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y python3 python3-tk gcc wine64 flatpak curl xdg-utils || \
-        DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y python3 python3-tk gcc curl || true
+        if [ -d /run/initramfs/memory ] || grep -q "slax" /etc/os-release 2>/dev/null || [ "$(hostname 2>/dev/null)" = "slax" ]; then
+            echo "[NRBlox-CLI] Sistema Debian Live (Slax) detectado — instalando pacotes essenciais leves..."
+            DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y python3 python3-tk gcc libc6-dev curl ca-certificates xdg-utils || true
+        else
+            DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y python3 python3-tk gcc libc6-dev g++-mingw-w64-x86-64 wine64 flatpak curl ca-certificates xdg-utils || \
+            DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y python3 python3-tk gcc libc6-dev wine64 flatpak curl ca-certificates xdg-utils || \
+            DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y python3 python3-tk gcc libc6-dev curl ca-certificates || true
+        fi
     elif command -v pacman >/dev/null 2>&1; then
         ${SUDO} pacman -Sy --noconfirm python tk gcc mingw-w64-gcc wine flatpak curl xdg-utils || true
     elif command -v dnf >/dev/null 2>&1; then
@@ -54,8 +59,8 @@ install_deps() {
 
 install_deps
 
-# 1b. Configure Bionic ELF backend for Roblox Player (bypasses Windows Hyperion Wine block on real Linux hosts)
-if command -v flatpak >/dev/null 2>&1 && [ ! -f /.dockerenv ]; then
+# 1b. Configure Bionic ELF backend for Roblox Player (skip on Live RAM systems to avoid filling RAM disk)
+if command -v flatpak >/dev/null 2>&1 && [ ! -f /.dockerenv ] && [ ! -d /run/initramfs/memory ]; then
     flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >/dev/null 2>&1 || true
     if ! flatpak list --app 2>/dev/null | grep -q "org.vinegarhq.Sober"; then
         echo "[NRBlox-CLI] Configurando motor ELF Linux para o Roblox Player..."
@@ -81,10 +86,17 @@ if [ -n "${SCRIPT_DIR}" ] && [ -f "${SCRIPT_DIR}/src/nrblox_linux_app.py" ]; the
     fi
 else
     echo "[NRBlox-CLI] Baixando motor nativo NRBlox Linux e código-fonte C/C++ do GitHub..."
-    curl -fsSL "${REPO_RAW_BASE}/linux/src/nrblox_linux_app.py" -o "${INSTALL_DIR}/src/nrblox_linux_app.py"
-    curl -fsSL "${REPO_RAW_BASE}/linux/runtime/nrblox_linux_core.c" -o "${INSTALL_DIR}/runtime/nrblox_linux_core.c"
-    curl -fsSL "${REPO_RAW_BASE}/linux/runtime/nrblox_wine_cloak.cpp" -o "${INSTALL_DIR}/runtime/nrblox_wine_cloak.cpp"
-    curl -fsSL "${REPO_RAW_BASE}/assets/icons/IconNRBlox.ico" -o "${INSTALL_DIR}/assets/icons/IconNRBlox.ico" || true
+    fetch_url() {
+        if command -v curl >/dev/null 2>&1; then
+            curl -fsSL "$1" -o "$2"
+        else
+            wget -qO "$2" "$1"
+        fi
+    }
+    fetch_url "${REPO_RAW_BASE}/linux/src/nrblox_linux_app.py" "${INSTALL_DIR}/src/nrblox_linux_app.py"
+    fetch_url "${REPO_RAW_BASE}/linux/runtime/nrblox_linux_core.c" "${INSTALL_DIR}/runtime/nrblox_linux_core.c"
+    fetch_url "${REPO_RAW_BASE}/linux/runtime/nrblox_wine_cloak.cpp" "${INSTALL_DIR}/runtime/nrblox_wine_cloak.cpp"
+    fetch_url "${REPO_RAW_BASE}/assets/icons/IconNRBlox.ico" "${INSTALL_DIR}/assets/icons/IconNRBlox.ico" || true
 fi
 
 chmod +x "${INSTALL_DIR}/src/nrblox_linux_app.py"
@@ -103,27 +115,12 @@ if command -v x86_64-w64-mingw32-g++ >/dev/null 2>&1; then
 fi
 
 # 5. Create global CLI command `nrblox` and `nrblox-linux` (also in /usr/local/bin so root & all users have it in PATH immediately)
-cat > "${INSTALL_DIR}/nrblox-linux" << 'EOF'
-#!/usr/bin/env bash
-# Auto-detect active X11 display if DISPLAY is not set (common in VNC / root shells)
-if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ] && [ -d /tmp/.X11-unix ]; then
-    for sock in /tmp/.X11-unix/X*; do
-        if [ -e "$sock" ]; then
-            disp_num="${sock#/tmp/.X11-unix/X}"
-            export DISPLAY=":${disp_num}"
-            break
-        fi
-    done
-fi
-exec python3 "${HOME}/.local/share/nrblox-linux/src/nrblox_linux_app.py" "$@"
-EOF
-chmod +x "${INSTALL_DIR}/nrblox-linux"
-
-ln -sf "${INSTALL_DIR}/nrblox-linux" "${BIN_DIR}/nrblox-linux"
-ln -sf "${INSTALL_DIR}/nrblox-linux" "${BIN_DIR}/nrblox"
+ln -sf "${INSTALL_DIR}/src/nrblox_linux_app.py" "${INSTALL_DIR}/nrblox-linux"
+ln -sf "${INSTALL_DIR}/src/nrblox_linux_app.py" "${BIN_DIR}/nrblox-linux"
+ln -sf "${INSTALL_DIR}/src/nrblox_linux_app.py" "${BIN_DIR}/nrblox"
 if [ -w /usr/local/bin ]; then
-    ln -sf "${INSTALL_DIR}/nrblox-linux" /usr/local/bin/nrblox-linux || true
-    ln -sf "${INSTALL_DIR}/nrblox-linux" /usr/local/bin/nrblox || true
+    ln -sf "${INSTALL_DIR}/src/nrblox_linux_app.py" /usr/local/bin/nrblox-linux || true
+    ln -sf "${INSTALL_DIR}/src/nrblox_linux_app.py" /usr/local/bin/nrblox || true
 fi
 
 for rc in "${HOME}/.bashrc" "${HOME}/.zshrc"; do
@@ -138,7 +135,7 @@ cat > "${APPS_DIR}/nrblox-linux.desktop" << EOF
 [Desktop Entry]
 Name=NRBlox
 Comment=NRBlox — Official Native Roblox Launcher, FastFlag & Mod Controller
-Exec=${BIN_DIR}/nrblox-linux %u
+Exec=${INSTALL_DIR}/src/nrblox_linux_app.py %u
 Terminal=false
 Type=Application
 Categories=Game;Utility;
@@ -181,7 +178,11 @@ echo ""
 # 7. Auto-launch NRBlox GUI right after CLI installation
 if [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
     echo "🚀 [NRBlox-CLI] Abrindo a janela gráfica do NRBlox em DISPLAY=${DISPLAY:-wayland}..."
-    nohup "${BIN_DIR}/nrblox-linux" >/tmp/nrblox-gui.log 2>&1 &
+    if command -v setsid >/dev/null 2>&1; then
+        setsid python3 "${INSTALL_DIR}/src/nrblox_linux_app.py" >/tmp/nrblox-gui.log 2>&1 < /dev/null &
+    else
+        nohup python3 "${INSTALL_DIR}/src/nrblox_linux_app.py" >/tmp/nrblox-gui.log 2>&1 < /dev/null &
+    fi
     sleep 1
 else
     echo "⚠️ Nenhum monitor X11/Wayland detectado nesta sessão. Execute 'nrblox' para abrir o menu!"

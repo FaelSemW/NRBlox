@@ -466,12 +466,29 @@ class LinuxEngineController:
         except Exception:
             pass
 
+    @staticmethod
+    def find_wine_binary():
+        for cand in [
+            shutil.which("wine64"),
+            shutil.which("wine"),
+            "/usr/bin/wine64",
+            "/usr/lib/wine/wine64",
+            "/usr/bin/wine",
+            "/usr/lib/wine/wine",
+        ]:
+            if cand and os.path.exists(cand) and os.access(cand, os.X_OK):
+                return cand
+        return None
+
     def has_bionic_elf_runtime(self) -> bool:
         if not shutil.which("flatpak"):
             return False
         try:
             out = subprocess.check_output(["flatpak", "list", "--app"], text=True, stderr=subprocess.DEVNULL)
-            return "org.vinegarhq.Sober" in out
+            if "org.vinegarhq.Sober" in out:
+                return True
+            out_user = subprocess.check_output(["flatpak", "list", "--user", "--app"], text=True, stderr=subprocess.DEVNULL)
+            return "org.vinegarhq.Sober" in out_user
         except Exception:
             return False
 
@@ -484,6 +501,26 @@ class LinuxEngineController:
             wrappers.append("gamemoderun")
         if self.settings.get("enable_mangohud") and shutil.which("mangohud"):
             wrappers.extend(["mangohud", "--dlsym"])
+
+        # Auto-provision Bionic ELF backend on normal persistent Linux hosts if flatpak is present
+        if not is_studio and not self.has_bionic_elf_runtime() and shutil.which("flatpak") and not Path("/run/initramfs/memory").exists():
+            if on_status:
+                on_status("Provisioning Linux Bionic ELF runtime (first run)...")
+            try:
+                subprocess.run(
+                    ["flatpak", "remote-add", "--user", "--if-not-exists", "flathub", "https://dl.flathub.org/repo/flathub.flatpakrepo"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=30,
+                )
+                subprocess.run(
+                    ["flatpak", "install", "--user", "-y", "flathub", "org.vinegarhq.Sober"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=300,
+                )
+            except Exception:
+                pass
 
         # If the Bionic ELF runtime is available on Linux for Player, use it as a headless backend
         # unless Studio is requested, since Windows RobloxPlayerBeta.dll (Hyperion) blocks Wine64.
@@ -523,7 +560,7 @@ class LinuxEngineController:
         if LinuxPaths.CORE_BIN.exists():
             cmd = wrappers + [str(LinuxPaths.CORE_BIN), str(target_exe), launch_arg]
         else:
-            wine_bin = shutil.which("wine64") or shutil.which("wine")
+            wine_bin = self.find_wine_binary()
             if not wine_bin:
                 return False, "Native runtime requires wine64 (run install-linux.sh to install)."
             cmd = wrappers + [wine_bin, str(target_exe), launch_arg]
