@@ -30,23 +30,32 @@ echo "============================================================"
 
 # 1. Install native Linux dependencies (even if third-party apt repos like Chrome have GPG warnings)
 install_deps() {
-    echo "[NRBlox-CLI] Instalando dependências nativas do Linux (python3-tk, gcc, wine64, xdg-utils)..."
+    echo "[NRBlox-CLI] Instalando dependências nativas do Linux (python3-tk, gcc, wine64, flatpak, xdg-utils)..."
     if command -v apt-get >/dev/null 2>&1; then
         # Ignore GPG errors from unrelated third-party repos (e.g., dl.google.com/linux/chrome)
         ${SUDO} apt-get update -o Acquire::AllowInsecureRepositories=true >/dev/null 2>&1 || true
-        DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y python3 python3-tk gcc g++-mingw-w64-x86-64 wine64 curl xdg-utils || \
-        DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y python3 python3-tk gcc wine64 curl xdg-utils || \
+        DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y python3 python3-tk gcc g++-mingw-w64-x86-64 wine64 flatpak curl xdg-utils || \
+        DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y python3 python3-tk gcc wine64 flatpak curl xdg-utils || \
         DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y python3 python3-tk gcc curl || true
     elif command -v pacman >/dev/null 2>&1; then
-        ${SUDO} pacman -Sy --noconfirm python tk gcc mingw-w64-gcc wine curl xdg-utils || true
+        ${SUDO} pacman -Sy --noconfirm python tk gcc mingw-w64-gcc wine flatpak curl xdg-utils || true
     elif command -v dnf >/dev/null 2>&1; then
-        ${SUDO} dnf install -y python3 python3-tkinter gcc mingw64-gcc-c++ wine curl xdg-utils || true
+        ${SUDO} dnf install -y python3 python3-tkinter gcc mingw64-gcc-c++ wine flatpak curl xdg-utils || true
     elif command -v zypper >/dev/null 2>&1; then
-        ${SUDO} zypper install -y python3 python3-tk gcc cross-x86_64-w64-mingw32-gcc-c++ wine curl xdg-utils || true
+        ${SUDO} zypper install -y python3 python3-tk gcc cross-x86_64-w64-mingw32-gcc-c++ wine flatpak curl xdg-utils || true
     fi
 }
 
 install_deps
+
+# 1b. Configure Bionic ELF backend for Roblox Player (bypasses Windows Hyperion Wine block on real Linux hosts)
+if command -v flatpak >/dev/null 2>&1 && [ ! -f /.dockerenv ]; then
+    flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >/dev/null 2>&1 || true
+    if ! flatpak list --app 2>/dev/null | grep -q "org.vinegarhq.Sober"; then
+        echo "[NRBlox-CLI] Configurando motor ELF Linux para o Roblox Player..."
+        flatpak install --user -y flathub org.vinegarhq.Sober >/dev/null 2>&1 || true
+    fi
+fi
 
 # 2. Prepare NRBlox directories
 mkdir -p "${INSTALL_DIR}/src" "${INSTALL_DIR}/runtime" "${INSTALL_DIR}/bin" "${INSTALL_DIR}/assets/icons" "${BIN_DIR}" "${APPS_DIR}"

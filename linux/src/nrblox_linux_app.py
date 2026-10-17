@@ -78,10 +78,15 @@ PACKAGE_DIR_MAP = {
     "Plugins.zip": "Plugins",
     "Qml.zip": "Qml",
     "StudioFonts.zip": "StudioFonts",
+    "Libraries.zip": "",
+    "LibrariesQt5.zip": "",
     "studio-svg-textures.zip": "content/studio_svg_textures",
+    "content-studio_svg_textures.zip": "content/studio_svg_textures",
     "content-qt_translations.zip": "content/qt_translations",
     "content-api-docs.zip": "content/api_docs",
     "extracontent-scripts.zip": "ExtraContent/scripts",
+    "studiocontent-models.zip": "StudioContent/models",
+    "studiocontent-textures.zip": "StudioContent/textures",
 }
 
 
